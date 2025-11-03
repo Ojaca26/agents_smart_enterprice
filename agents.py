@@ -5,6 +5,15 @@ from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_community.agent_toolkits.sql.base import create_sql_agent
 from langchain_core.messages import AIMessage, HumanMessage
 
+
+AGENT_METADATA = {
+    "sql_agent": {"icon": "🧩", "color": "#fbc02d", "role": "Agente SQL"},
+    "analyst_agent": {"icon": "📊", "color": "#43a047", "role": "Analista de Datos"},
+    "audit_agent": {"icon": "🔍", "color": "#e53935", "role": "Auditor"},
+    "orchestrator_agent": {"icon": "💼", "color": "#1976d2", "role": "Orquestador"},
+}
+
+
 # ============================================
 # 🧩 1. SQL AGENT
 # ============================================
@@ -86,5 +95,6 @@ def orchestrator_agent():
         """
         result = llm.invoke(prompt)
         return AIMessage(content=result.content)
+
 
     return orchestrate
