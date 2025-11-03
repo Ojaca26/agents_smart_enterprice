@@ -1,5 +1,5 @@
 import streamlit as st
-from langchain_google_genai import ChatGoogleGenerai
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_community.agent_toolkits.sql.base import create_sql_agent
@@ -166,3 +166,4 @@ def sql_final_agent_node(state: AgentState):
         return {"messages": [AIMessage(content=response)]}
     except Exception as e:
         return {"messages": [AIMessage(content=f"Lo siento, tuve un error al consultar la base de datos: {e}")]}
+
