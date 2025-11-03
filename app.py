@@ -1,10 +1,9 @@
 # ==========================================================
-# 🧠 IANA DATACENTER - Asistente Empresarial Inteligente
+# 🤖 IANA DataCenter - Red de Agentes Inteligentes Empresariales
 # Autor: DataInsights Colombia
 # Descripción:
-#   Este script construye una interfaz Streamlit conectada
-#   a LangGraph y Gemini, con agentes autónomos (SQL, Analista,
-#   Auditor y Orquestador) sobre una base de datos MySQL modelo estrella.
+#   Demostrador del concepto IANA: ecosistema de agentes AI autónomos
+#   para empresas, con analítica, auditoría y orquestación.
 # ==========================================================
 
 import streamlit as st
@@ -16,131 +15,131 @@ import time
 # ==========================================================
 # 🧩 CONFIGURACIÓN DE LA PÁGINA
 # ==========================================================
-st.set_page_config(page_title="🧠 IANA DataCenter", layout="wide")
+st.set_page_config(page_title="🤖 IANA - Red de Agentes Inteligentes", layout="wide")
 
-st.title("💼 IANA DataCenter - Inteligencia Empresarial")
+# --- Logo y encabezado principal ---
+col1, col2 = st.columns([1, 8])
+with col1:
+    st.image("logo.png", width=100)
+with col2:
+    st.markdown("""
+    # 🤖 IANA DataCenter
+    ### Red de Agentes Inteligentes Empresariales
+    """)
+
 st.markdown("""
-Este asistente **autónomo** analiza tus datos empresariales reales 
-conectados al modelo estrella (Ingresos, Costos, Empresa, etc.).
-Usa **AI** para interpretar, auditar y explicar resultados en lenguaje natural.
+IANA es una red de **agentes autónomos** desarrollada por **DataInsights Colombia**, 
+diseñada para **analizar datos reales, detectar oportunidades y asistir en decisiones ejecutivas** 
+con lenguaje natural y pensamiento analítico.
+
+Cada agente tiene un rol específico —como analista, auditor o gerente virtual— y 
+trabajan en conjunto bajo un **modelo orquestado** que refleja la estructura de una empresa moderna.
 """)
 
 # ==========================================================
-# 🔐 CONEXIÓN A BASE DE DATOS
+# 🔐 CONEXIÓN A BASE DE DATOS (Simulada / Real)
 # ==========================================================
 @st.cache_resource
 def get_connection():
-    """Crea y mantiene la conexión a MySQL."""
+    """Crea y mantiene la conexión a la base de datos (si aplica)."""
     creds = st.secrets["db_credentials"]
     uri = f"mysql+pymysql://{creds['user']}:{creds['password']}@{creds['host']}/{creds['database']}"
     engine = create_engine(uri, pool_pre_ping=True)
     return engine.connect()
 
-# Intentar conectar
 try:
     conn = get_connection()
-    st.sidebar.success("✅ Conectado a la base de datos")
-except Exception as e:
-    st.sidebar.error(f"⚠️ Error al conectar a la BD: {e}")
+    st.sidebar.success("✅ Conectado a la base de datos DataInsights")
+except Exception:
+    st.sidebar.warning("⚠️ Modo demostración (sin conexión real a base de datos)")
 
 # ==========================================================
-# 🧱 CONSTRUCCIÓN DEL GRAFO DE AGENTES
+# 🧠 CONSTRUCCIÓN DE LA RED DE AGENTES
 # ==========================================================
 from agents import sql_agent, analyst_agent, audit_agent, orchestrator_agent
 
-# Construir grafo principal
 if "graph" not in st.session_state:
     st.session_state.graph = build_langgraph()
     st.session_state.context = []
 
 # ==========================================================
-# 🎛️ SIDEBAR - Información de Agentes y Controles
+# 🎛️ SIDEBAR - Información General
 # ==========================================================
-st.sidebar.header("🧩 Agentes del Sistema")
+st.sidebar.header("🧩 Agentes Inteligentes de IANA")
 
 st.sidebar.markdown("""
-**1️⃣ SQLAgent:**  
-Consulta 7 vistas del modelo estrella (`VIEW_Fact_Ingresos`, `VIEW_Fact_Costos`, `VIEW_Fact_Solicitudes`, etc.).
-
-**2️⃣ AnalystAgent:**  
-Calcula KPIs, márgenes, cumplimiento y tendencias.
-
-**3️⃣ AuditAgent:**  
-Detecta desviaciones o alertas en tiempos o costos.
-
-**4️⃣ OrchestratorAgent:**  
+**💼 OrchestratorAgent**  
 Gerente virtual. Analiza la intención del usuario y orquesta a los demás agentes.
 
-**5️⃣ MemoryAgent:**  
+**📊 AnalystAgent**  
+Interpreta métricas, márgenes, tendencias y genera insights ejecutivos.
+
+**🧩 SQLAgent**  
+Consulta los datos estructurados en las fuentes empresariales o Data Warehouse.
+
+**🔍 AuditAgent**  
+Detecta anomalías, alertas o desviaciones en los indicadores.
+
+**🧠 MemoryAgent**  
 Mantiene el contexto y la conversación activa.
 """)
 
-# Botón para mostrar el diagrama LangGraph
 st.sidebar.markdown("---")
 if st.sidebar.button("📈 Ver flujo LangGraph"):
-    with st.spinner("Generando diagrama LangGraph..."):
+    with st.spinner("Generando visualización de la red de agentes..."):
         graph = st.session_state.graph
-        mermaid = export_graph_mermaid(graph)
-        st.sidebar.markdown("### 🔍 Diagrama LangGraph")
-        st.components.v1.html(f"<pre>{mermaid}</pre>", height=420)
+        export_graph_mermaid(graph)
+    st.sidebar.subheader("📊 Diagrama LangGraph")
 
 st.sidebar.markdown("---")
-st.sidebar.caption("© 2025 DataInsights Colombia - Ecosistema IANA 🤖")
+st.sidebar.caption("© 2025 DataInsights Colombia — Ecosistema IANA 🤖")
 
 # ==========================================================
-# 💬 INTERFAZ DE CHAT PRINCIPAL
+# 💬 INTERFAZ DE CHAT DEMOSTRATIVA
 # ==========================================================
-st.subheader("💬 Chat Empresarial con IANA DataCenter")
+st.subheader("💬 Interfaz de Conversación con IANA")
 
-# Input de usuario
-user_input = st.chat_input("Escribe tu pregunta sobre el negocio...")
+user_input = st.chat_input("Escribe una pregunta o escenario de negocio...")
 
 if user_input:
-    # Mostrar mensaje del usuario
     st.chat_message("user").write(user_input)
 
-    # Recuperar grafo y orquestador
-    graph = st.session_state.graph
     orchestrator = orchestrator_agent()
 
-    with st.spinner("Analizando intención..."):
-        # Enviar mensaje al agente orquestador
+    with st.spinner("Analizando intención y orquestando agentes..."):
         orchestrator_response = orchestrator(HumanMessage(content=user_input))
         st.chat_message("assistant").write(orchestrator_response.content)
         time.sleep(0.5)
 
-    # Decidir qué agente ejecutar (modo simple)
     texto = user_input.lower()
-    if any(x in texto for x in ["facturación", "ingresos", "ventas", "costos", "solicitud", "tiempo"]):
+
+    if any(x in texto for x in ["ingreso", "factura", "venta", "costo", "pedido"]):
         sql = sql_agent()
-        with st.spinner("🔎 Consultando base de datos..."):
+        with st.spinner("🔎 Consultando datos..."):
             sql_response = sql.run(user_input)
         st.chat_message("assistant").write(sql_response)
 
-    elif any(x in texto for x in ["margen", "rentabilidad", "cumplimiento", "análisis", "tendencia"]):
+    elif any(x in texto for x in ["margen", "rentabilidad", "cumplimiento", "tendencia"]):
         analista = analyst_agent()
         with st.spinner("📊 Analizando indicadores..."):
             analista_response = analista(user_input)
         st.chat_message("assistant").write(analista_response.content)
 
-    elif any(x in texto for x in ["error", "alerta", "riesgo", "desviación", "problema"]):
+    elif any(x in texto for x in ["alerta", "riesgo", "desviación", "problema", "auditoría"]):
         auditor = audit_agent()
-        with st.spinner("🔍 Revisando posibles alertas..."):
+        with st.spinner("🔍 Auditando desempeño..."):
             audit_response = auditor(user_input)
         st.chat_message("assistant").write(audit_response.content)
 
     else:
-        st.chat_message("assistant").write("🤖 No estoy seguro, pero puedo ayudarte a revisar el negocio completo si me indicas un área (Facturación, Costos, Rentabilidad, etc.).")
+        st.chat_message("assistant").write("🤖 Puedo ayudarte a revisar ventas, costos, márgenes o riesgos. ¿Qué deseas analizar?")
 
 # ==========================================================
-# 🧭 NOTA FINAL DE USO
+# 🧭 NOTA FINAL
 # ==========================================================
 st.markdown("""
 ---
-**💡 Tip:**  
-Puedes hacer preguntas como:
-- *“¿Cuál fue el margen bruto de octubre?”*  
-- *“Muéstrame los costos por empresa y su cumplimiento.”*  
-- *“Detecta desviaciones en los tiempos de ejecución.”*  
+**💡 Demostración Conceptual IANA:**  
+Este entorno representa cómo múltiples agentes de IA trabajan juntos en la nube para asistir a equipos ejecutivos.  
+El sistema puede conectarse a fuentes reales de datos, generar reportes, responder consultas o ejecutar auditorías inteligentes.
 """)
-
