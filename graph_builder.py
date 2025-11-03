@@ -13,6 +13,7 @@ from agents import (
 # --- 1. Función de Enrutamiento ---
 # Esta función lee el estado y decide el siguiente paso.
 def router(state: AgentState):
+    """Enruta al nodo correcto basado en la decisión del orquestador."""
     next_agent = state.get("next_agent")
     
     if next_agent == "analyst_agent" or next_agent == "audit_agent":
@@ -28,15 +29,22 @@ def router(state: AgentState):
 # --- 2. Función de Enrutamiento POST-SQL ---
 # Decide a dónde ir después de obtener los datos
 def post_sql_router(state: AgentState):
+    """Enruta al analista o auditor después de obtener los datos."""
     next_agent = state.get("next_agent")
     if next_agent == "analyst_agent":
         return "analyst_agent"
     elif next_agent == "audit_agent":
         return "audit_agent"
+    else:
+        # Fallback por si algo sale mal
+        return END
 
 def build_langgraph():
     """Construye el grafo condicional de agentes LangGraph"""
-    graph = StateGraph(AgentState)
+    
+    # Aquí estaba el error 'state_schema':
+    # El grafo DEBE ser inicializado con el estado 'AgentState'
+    graph = StateGraph(AgentState) 
 
     # --- 1. Añadir los Nodos ---
     # Cada nodo es una función
@@ -50,6 +58,8 @@ def build_langgraph():
     # --- 2. Definir los Bordes (Edges) ---
     
     # Punto de entrada
+    # Aquí estaba el error 'set_entrypoint' (era 'set_entrypoint')
+    # y el error 'Graph must have an entrypoint'
     graph.set_entry_point("orchestrator")
 
     # Borde condicional desde el Orquestador
