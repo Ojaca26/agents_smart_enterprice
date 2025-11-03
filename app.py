@@ -16,13 +16,13 @@ import time
 # ==========================================================
 # 🧩 CONFIGURACIÓN DE LA PÁGINA
 # ==========================================================
-st.set_page_config(page_title="🧠 IANA DataCenter - OML", layout="wide")
+st.set_page_config(page_title="🧠 IANA DataCenter", layout="wide")
 
-st.title("💼 IANA DataCenter - Inteligencia Empresarial OML")
+st.title("💼 IANA DataCenter - Inteligencia Empresarial")
 st.markdown("""
 Este asistente **autónomo** analiza tus datos empresariales reales 
-conectados al modelo estrella OML (Fact_Ingresos, Fact_Costos, Dim_Empresa, etc.).
-Usa **Gemini Pro** para interpretar, auditar y explicar resultados en lenguaje natural.
+conectados al modelo estrella (Ingresos, Costos, Empresa, etc.).
+Usa **AI** para interpretar, auditar y explicar resultados en lenguaje natural.
 """)
 
 # ==========================================================
@@ -39,7 +39,7 @@ def get_connection():
 # Intentar conectar
 try:
     conn = get_connection()
-    st.sidebar.success("✅ Conectado a la base de datos OML")
+    st.sidebar.success("✅ Conectado a la base de datos")
 except Exception as e:
     st.sidebar.error(f"⚠️ Error al conectar a la BD: {e}")
 
@@ -143,3 +143,4 @@ Puedes hacer preguntas como:
 - *“Muéstrame los costos por empresa y su cumplimiento.”*  
 - *“Detecta desviaciones en los tiempos de ejecución.”*  
 """)
+
