@@ -22,6 +22,8 @@ except ImportError:
     st.error("Faltan librerías de voz. Ejecuta: pip install streamlit-mic-recorder SpeechRecognition")
     st.stop()
 
+# FORZANDO REINICIO COMPLETO
+
 # ==========================================================
 # 🧩 CONFIGURACIÓN DE LA PÁGINA
 # ==========================================================
@@ -236,3 +238,4 @@ elif prompt_text:
 # Si tenemos una entrada (de voz o texto), la procesamos
 if prompt_a_procesar:
     procesar_pregunta(prompt_a_procesar)
+
