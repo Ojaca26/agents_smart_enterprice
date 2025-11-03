@@ -12,10 +12,9 @@ from agents import sql_agent, analyst_agent, audit_agent, orchestrator_agent
 def build_langgraph():
     """
     Construye el grafo principal de agentes LangGraph
-    para el DataCenter empresarial.
     """
     # Crear grafo vacío con nombre descriptivo
-    graph = StateGraph(name="DataCenterGraph")
+    graph = StateGraph(state_schema=dict)
 
     # Registrar los nodos (cada agente es un nodo)
     graph.add_node("orchestrator", orchestrator_agent())
@@ -49,3 +48,4 @@ def export_graph_mermaid(graph):
         return mermaid_code
     except Exception as e:
         return f"⚠️ Error al generar Mermaid: {e}"
+
