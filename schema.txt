@@ -1,11 +1,6 @@
 datacenter/
+├── agents.py
 ├── app.py
 ├── graph_builder.py
-├── agents/
-│   ├── orchestrator_agent.py
-│   ├── sql_agent.py
-│   ├── analyst_agent.py
-│   └── audit_agent.py
-├── utils/
-│   └── db_connection.py
-└── requirements.txt
+├── requirements.txt
+└── schema.txt      (solo informativo)
