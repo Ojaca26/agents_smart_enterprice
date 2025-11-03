@@ -12,6 +12,7 @@ from graph_builder import build_langgraph
 from agents import AgentState # Importamos el estado
 from typing import Optional
 import io
+import time
 
 # Importar librerías de voz
 try:
@@ -29,25 +30,65 @@ col1, col2 = st.columns([1, 8])
 with col1:
     st.image("logo.png", width=100)
 with col2:
-    st.markdown("# 🤖 IANA DataCenter\n### Red de Agentes Inteligentes Empresariales")
+    st.markdown("""
+    # 🤖 IANA DataCenter
+    ### Red de Agentes Inteligentes Empresariales
+    """)
 
-# (Aquí puedes poner tu descripción de IANA...)
+st.markdown("""
+IANA es una red de **agentes autónomos** desarrollada por **DataInsights Colombia**, 
+diseñada para **analizar datos reales, detectar oportunidades y asistir en decisiones ejecutivas** con lenguaje natural y pensamiento analítico.
+""")
+
+
+# ==========================================================
+# 🔐 CONEXIÓN A BASE DE DATOS (Opcional, para el sidebar)
+# ==========================================================
+# @st.cache_resource
+# def get_connection_status():
+#     """Revisa el estado de la conexión a la base de datos."""
+#     try:
+#         creds = st.secrets["db_credentials"]
+#         uri = f"mysql+pymysql://{creds['user']}:{creds['password']}@{creds['host']}/{creds['database']}"
+#         engine = create_engine(uri, pool_pre_ping=True)
+#         conn = engine.connect()
+#         conn.close()
+#         return True
+#     except Exception:
+#         return False
+
+# if get_connection_status():
+#     st.sidebar.success("✅ Conectado a la base de datos DataInsights")
+# else:
+#     st.sidebar.warning("⚠️ Modo demostración (sin conexión real a base de datos)")
+
 
 # ==========================================================
 # 🧠 CONSTRUCCIÓN DE LA RED DE AGENTES (Una sola vez)
 # ==========================================================
-# Usamos cache_resource para no reconstruir el grafo en cada re-run
 @st.cache_resource
 def get_graph():
+    """Construye y cachea el grafo LangGraph compilado."""
     return build_langgraph()
 
 graph = get_graph()
 
 # ==========================================================
-# 🎛️ SIDEBAR (Sin cambios)
+# 🎛️ SIDEBAR
 # ==========================================================
 st.sidebar.header("🧩 Agentes Inteligentes de IANA")
-# (Tu sidebar markdown aquí...)
+st.sidebar.markdown("""
+**💼 OrchestratorAgent** Gerente virtual. Analiza la intención y enruta al agente correcto.
+
+**📊 AnalystAgent** Interpreta métricas, márgenes, tendencias y genera insights.
+
+**🧩 SQLAgent** Consulta los datos estructurados en las fuentes empresariales.
+
+**🔍 AuditAgent** Detecta anomalías, alertas o desviaciones en los indicadores.
+
+**💬 ConversationalAgent** Maneja saludos y conversación general.
+""")
+st.sidebar.markdown("---")
 st.sidebar.caption("© 2025 DataInsights Colombia — Ecosistema IANA 🤖")
 
 
@@ -61,7 +102,6 @@ def get_recognizer():
     r.dynamic_energy_threshold = True
     return r
 
-# (La función transcribir_audio_bytes va aquí, sin cambios)
 def transcribir_audio_bytes(data_bytes: bytes, language: str) -> Optional[str]:
     try:
         r = get_recognizer()
@@ -82,16 +122,10 @@ def procesar_pregunta(prompt: str):
     y muestra el progreso en el expander.
     """
     
-    # 1. Añadir mensaje del usuario al historial
-    # Nota: el historial de st.session_state ahora solo se usa para MOSTRAR
-    # El estado real del chat vive dentro del grafo (AgentState)
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-        
+    # 1. Añadir mensaje del usuario al historial de Streamlit
     st.session_state.messages.append({"role": "user", "content": prompt})
     
     # Reconstruir el historial para el grafo
-    # El grafo necesita objetos HumanMessage/AIMessage
     graph_history = []
     for msg in st.session_state.messages:
         if msg["role"] == "user":
@@ -101,8 +135,7 @@ def procesar_pregunta(prompt: str):
 
     # Definir la entrada para el grafo
     graph_input = {
-        "messages": [HumanMessage(content=prompt)] # Solo pasamos el último mensaje
-        # Si quisieras memoria, pasarías todo 'graph_history'
+        "messages": graph_history # Pasamos todo el historial
     }
 
     # 2. Abrir el contenedor del asistente y el expander
@@ -111,37 +144,44 @@ def procesar_pregunta(prompt: str):
         
         with st.expander("⚙️ Ver Proceso de IANA", expanded=True):
             # Usamos un placeholder para ir añadiendo los logs del stream
-            log_placeholder = st.empty()
-            log_messages = []
+            # Usar st.info, st.success, etc. aquí dentro funciona bien
             
             try:
                 # --- ¡AQUÍ OCURRE LA MAGIA! ---
-                # Usamos graph.stream()
-                events = graph.stream(graph_input, stream_mode="values")
+                # Usamos graph.stream() para obtener los eventos
+                # Usamos 'updates' para obtener solo el CAMBIO en cada paso
+                events = graph.stream(graph_input, stream_mode="updates")
                 
                 for event in events:
-                    # event es el 'AgentState' completo en cada paso
-                    # Vamos a mostrar qué nodo se acaba de ejecutar
+                    # 'event' es un dict que dice qué nodo se ejecutó
+                    # y cuál es su salida.
+                    node_name, node_output = next(iter(event.items()))
                     
-                    # (Esta es una forma simple de detectar el último nodo ejecutado)
-                    # Una forma más robusta es usar `stream_mode="updates"`
-                    # Pero esta es más fácil de entender:
-                    
-                    if "next_agent" in event and not any("Orchestrator" in m for m in log_messages):
-                         log_messages.append(f"🤖 **Orchestrator Agent:** Decidió ruta -> {event['next_agent']}")
-                         log_placeholder.markdown("\n\n".join(log_messages))
+                    if node_name == "orchestrator" and node_output.get("next_agent"):
+                        st.success(f"🤖 **Orquestador:** Ruta decidida -> `{node_output['next_agent']}`")
+                    elif node_name == "sql_data_getter":
+                        st.info("🧩 **SQL Agent:** Datos extraídos.")
+                    elif node_name == "sql_final_agent" and node_output.get("messages"):
+                        st.success("🧩 **SQL Agent:** Consulta finalizada.")
+                        final_response = node_output["messages"][-1].content
+                    elif node_name == "analyst_agent" and node_output.get("messages"):
+                        st.success("📊 **Analista:** Análisis completado.")
+                        final_response = node_output["messages"][-1].content
+                    elif node_name == "audit_agent" and node_output.get("messages"):
+                        st.success("🔍 **Auditor:** Auditoría completada.")
+                        final_response = node_output["messages"][-1].content
+                    elif node_name == "conversational_agent" and node_output.get("messages"):
+                        st.success("💬 **Conversacional:** Respuesta generada.")
+                        final_response = node_output["messages"][-1].content
+                
+                if not final_response:
+                    # Esto pasa si el grafo termina sin una respuesta (ej. un error)
+                    final_response = "Lo siento, no pude procesar esa solicitud."
+                    st.error("Error en el flujo del grafo.")
 
-                    if event.get("sql_data") and not any("SQL Agent" in m for m in log_messages):
-                        log_messages.append("🧩 **SQL Agent:** Datos extraídos de la base de datos.")
-                        log_placeholder.markdown("\n\n".join(log_messages))
-
-                    # El evento final tendrá el último mensaje
-                    if event["messages"][-1].role == "ai":
-                        final_response = event["messages"][-1].content
-                        
             except Exception as e:
                 st.error(f"❌ Ha ocurrido un error en la red de agentes: {e}")
-                final_response = "Lo siento, tuve un problema al procesar tu solicitud."
+                final_response = f"Lo siento, tuve un problema al procesar tu solicitud: {e}"
 
         # 3. Mostrar la respuesta final fuera del expander
         st.markdown(final_response)
@@ -170,16 +210,29 @@ lang = st.secrets.get("stt_language", "es-CO") # Lenguaje para la voz
 input_container = st.container()
 with input_container:
     col1, col2 = st.columns([1, 4])
+    
+    # Columna 1: Botón de Voz
     with col1:
-        voice_text = speech_to_text(language=lang, start_prompt="🎙️ Hablar", stop_prompt="🛑 Grabando...", use_container_width=True, just_once=True, key="stt")
+        voice_text = speech_to_text(
+            language=lang,
+            start_prompt="🎙️ Hablar",
+            stop_prompt="🛑 Grabando...",
+            use_container_width=True,
+            just_once=True,
+            key="stt"
+        )
+    
+    # Columna 2: Entrada de Texto
     with col2:
         prompt_text = st.chat_input("... o escribe tu pregunta aquí")
 
+# --- Lógica para procesar la entrada (sea voz o texto) ---
 prompt_a_procesar = None
 if voice_text:
     prompt_a_procesar = voice_text
 elif prompt_text:
     prompt_a_procesar = prompt_text
 
+# Si tenemos una entrada (de voz o texto), la procesamos
 if prompt_a_procesar:
     procesar_pregunta(prompt_a_procesar)
