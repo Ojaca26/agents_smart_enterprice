@@ -26,16 +26,42 @@ def build_langgraph():
 
 def export_graph_mermaid(graph):
     """
-    Genera y renderiza visualmente el diagrama LangGraph
-    con soporte MermaidJS en Streamlit.
+    Genera un diagrama visual colorido del flujo LangGraph
+    con íconos y estilos por agente.
     """
     try:
         mermaid_code = graph.get_graph().draw_mermaid()
 
-        # ✅ Crear HTML con soporte visual
+        # 🎨 Personalización de estilos e íconos
+        style = """
+        %%{init: {'theme': 'default', 'themeVariables': { 'fontFamily': 'Inter', 'primaryColor': '#1E88E5'}}}%%
+        graph TD;
+        classDef orchestrator fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff,font-weight:bold;
+        classDef analyst_agent fill:#43a047,stroke:#1b5e20,stroke-width:2px,color:#fff,font-weight:bold;
+        classDef sql_agent fill:#fbc02d,stroke:#f57f17,stroke-width:2px,color:#000,font-weight:bold;
+        classDef audit_agent fill:#e53935,stroke:#b71c1c,stroke-width:2px,color:#fff,font-weight:bold;
+        classDef memory_agent fill:#8e24aa,stroke:#4a148c,stroke-width:2px,color:#fff,font-weight:bold;
+
+        %% Etiquetas con emojis
+        orchestrator:::orchestrator --> sql_agent:::sql_agent
+        orchestrator:::orchestrator --> analyst_agent:::analyst_agent
+        orchestrator:::orchestrator --> audit_agent:::audit_agent
+        sql_agent:::sql_agent --> __end__
+        analyst_agent:::analyst_agent --> __end__
+        audit_agent:::audit_agent --> __end__
+
+        %% Nombres más atractivos
+        orchestrator["💼 Orchestrator Agent"]
+        sql_agent["🧩 SQL Agent"]
+        analyst_agent["📊 Analyst Agent"]
+        audit_agent["🔍 Audit Agent"]
+        __end__["🏁 End"]
+        """
+
+        # ✅ Crear HTML visual
         html = f"""
         <div class="mermaid">
-        {mermaid_code}
+        {style}
         </div>
         <script type="module">
         import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
@@ -43,8 +69,7 @@ def export_graph_mermaid(graph):
         </script>
         """
 
-        # Renderizar visualmente dentro del sidebar o app
-        st.components.v1.html(html, height=600, scrolling=True)
+        st.components.v1.html(html, height=650, scrolling=True)
 
     except Exception as e:
         st.error(f"⚠️ Error al generar Mermaid: {e}")
