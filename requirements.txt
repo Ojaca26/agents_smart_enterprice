@@ -1,0 +1,18 @@
+# --- CORE APP ---
+streamlit==1.39.0
+pandas==2.2.3
+sqlalchemy==2.0.36
+pymysql==1.1.1
+
+# --- LLMs & AI FRAMEWORKS ---
+langchain==0.3.4
+langgraph==0.0.58
+langchain-google-genai==1.0.5
+
+# --- VISUALIZACIÓN / UTILIDADES ---
+matplotlib==3.9.2
+numpy==1.26.4
+markdown==3.7
+
+# --- SEGURIDAD / DEPLOY ---
+python-dotenv==1.0.1
