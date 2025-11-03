@@ -97,7 +97,7 @@ st.sidebar.caption("© 2025 DataInsights Colombia — Ecosistema IANA 🤖")
 # ==========================================================
 # 💬 INTERFAZ DE CHAT DEMOSTRATIVA
 # ==========================================================
-st.subheader("💬 Interfaz de Conversación con IANA")
+st.subheader("💬 Conversación con IANA")
 
 user_input = st.chat_input("Escribe una pregunta o escenario de negocio...")
 
@@ -145,4 +145,3 @@ Puedes hacer preguntas como:
 - *“Muéstrame los costos por empresa y su cumplimiento.”*  
 - *“Detecta desviaciones en los tiempos de ejecución.”*  
 """)
-
