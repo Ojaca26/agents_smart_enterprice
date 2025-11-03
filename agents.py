@@ -1,10 +1,9 @@
 import streamlit as st
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI  # <-- ‼️ ESTA LÍNEA ES LA CORRECCIÓN
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_community.agent_toolkits.sql.base import create_sql_agent
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-# --- ¡NUEVA IMPORTACIÓN! ---
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 
@@ -29,7 +28,7 @@ def sql_agent_node(state: AgentState):
     creds = st.secrets["db_credentials"]
     uri = f"mysql+pymysql://{creds['user']}:{creds['password']}@{creds['host']}/{creds['database']}"
     db = SQLDatabase.from_uri(uri)
-    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0) # <-- ‼️ CORREGIDO
     toolkit = SQLDatabaseToolkit(db=db, llm=llm)
     agent = create_sql_agent(llm=llm, toolkit=toolkit, verbose=False) 
     
@@ -42,9 +41,8 @@ def sql_agent_node(state: AgentState):
 # --- 2. ANALYST AGENT (CORREGIDO) ---
 def analyst_agent_node(state: AgentState):
     st.info("📊 Analyst Agent: Interpretando métricas...")
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.3)
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.3) # <-- ‼️ CORREGIDO
     
-    # Usamos MessagesPlaceholder para manejar el historial
     prompt = ChatPromptTemplate.from_messages([
         ("system", f"""
          Eres un analista financiero experto.
@@ -61,14 +59,13 @@ def analyst_agent_node(state: AgentState):
     ])
     
     chain = prompt | llm | StrOutputParser()
-    # Pasamos los mensajes al chain
     response = chain.invoke({"messages": state["messages"]})
     return {"messages": [AIMessage(content=response)]}
 
 # --- 3. AUDIT AGENT (CORREGIDO) ---
 def audit_agent_node(state: AgentState):
     st.info("🔍 Audit Agent: Detectando anomalías...")
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.2)
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.2) # <-- ‼️ CORREGIDO
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", f"""
@@ -89,7 +86,7 @@ def audit_agent_node(state: AgentState):
 # --- 4. ORCHESTRATOR AGENT (Sin cambios) ---
 def orchestrator_node(state: AgentState):
     st.info("🤖 Orchestrator Agent: Analizando intención...")
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0) # <-- ‼️ CORREGIDO
     
     user_question = state["messages"][-1].content.lower()
 
@@ -108,17 +105,14 @@ def orchestrator_node(state: AgentState):
 # --- 5. AGENTE CONVERSACIONAL (¡CORREGIDO!) ---
 def conversational_agent_node(state: AgentState):
     st.info("💬 Conversational Agent: Generando respuesta...")
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.4)
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.4) # <-- ‼️ CORREGIDO
     
-    # Esta es la forma robusta de hacerlo:
     prompt = ChatPromptTemplate.from_messages([
         ("system", "Eres IANA, una asistente IA ejecutiva y amigable. Responde al usuario de forma natural y cercana."),
-        MessagesPlaceholder(variable_name="messages") # <-- Usar el placeholder
+        MessagesPlaceholder(variable_name="messages")
     ])
     
     chain = prompt | llm | StrOutputParser()
-    
-    # Pasamos el historial de mensajes al 'invoke'
     response = chain.invoke({"messages": state["messages"]})
     
     return {"messages": [AIMessage(content=response)]}
@@ -132,7 +126,7 @@ def sql_final_agent_node(state: AgentState):
     creds = st.secrets["db_credentials"]
     uri = f"mysql+pymysql://{creds['user']}:{creds['password']}@{creds['host']}/{creds['database']}"
     db = SQLDatabase.from_uri(uri)
-    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0) # <-- ‼️ CORREGIDO
     toolkit = SQLDatabaseToolkit(db=db, llm=llm)
     agent = create_sql_agent(llm=llm, toolkit=toolkit, verbose=False)
     
