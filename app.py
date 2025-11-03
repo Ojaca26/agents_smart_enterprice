@@ -17,15 +17,31 @@ import time
 # ==========================================================
 st.set_page_config(page_title="IANA - Red de Agentes Inteligentes", page_icon="logo.png", layout="wide")
 
-# --- Logo y encabezado principal ---
-col1, col2 = st.columns([1, 8])
+st.markdown("### 🎤 Habla con IANA o escribe tu pregunta")
+lang = st.secrets.get("stt_language", "es-CO")
+
+col1, col2 = st.columns([1, 4])
 with col1:
-    st.image("logo.png", width=100)
+    voice_text = speech_to_text(
+        language=lang,
+        start_prompt="🎙️ Hablar",
+        stop_prompt="🛑 Detener",
+        use_container_width=True,
+        just_once=True,
+        key="stt",
+    )
+
+    if voice_text:
+        st.info(f"🗣️ Dijiste: “{voice_text}”")
+
 with col2:
-    st.markdown("""
-    # 🤖 IANA DataCenter
-    ### Red de Agentes Inteligentes Empresariales
-    """)
+    prompt_text = st.chat_input("... o escribe tu pregunta aquí")
+
+# Unificamos texto o voz
+prompt_a_procesar = voice_text or prompt_text
+
+if prompt_a_procesar:
+    procesar_pregunta(prompt_a_procesar)
 
 st.markdown("""
 IANA es una red de **agentes autónomos** desarrollada por **DataInsights Colombia**, 
@@ -145,4 +161,5 @@ Puedes hacer preguntas como:
 - *“Muéstrame los costos por empresa y su cumplimiento.”*  
 - *“Detecta desviaciones en los tiempos de ejecución.”*  
 """)
+
 
