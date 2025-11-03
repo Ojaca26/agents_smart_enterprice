@@ -15,7 +15,7 @@ import time
 # ==========================================================
 # 🧩 CONFIGURACIÓN DE LA PÁGINA
 # ==========================================================
-st.set_page_config(page_title="🤖 IANA - Red de Agentes Inteligentes", layout="wide")
+st.set_page_config(page_title="IANA - Red de Agentes Inteligentes", page_icon="logo.png", layout="wide")
 
 # --- Logo y encabezado principal ---
 col1, col2 = st.columns([1, 8])
@@ -145,3 +145,4 @@ Puedes hacer preguntas como:
 - *“Muéstrame los costos por empresa y su cumplimiento.”*  
 - *“Detecta desviaciones en los tiempos de ejecución.”*  
 """)
+
