@@ -139,7 +139,10 @@ if user_input:
 # ==========================================================
 st.markdown("""
 ---
-**💡 Demostración Conceptual IANA:**  
-Este entorno representa cómo múltiples agentes de IA trabajan juntos en la nube para asistir a equipos ejecutivos.  
-El sistema puede conectarse a fuentes reales de datos, generar reportes, responder consultas o ejecutar auditorías inteligentes.
+**💡 Tip:**  
+Puedes hacer preguntas como:
+- *“¿Cuál fue el margen bruto de octubre?”*  
+- *“Muéstrame los costos por empresa y su cumplimiento.”*  
+- *“Detecta desviaciones en los tiempos de ejecución.”*  
 """)
+
