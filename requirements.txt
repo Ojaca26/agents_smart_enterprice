@@ -1,5 +1,7 @@
 # === CORE FRAMEWORK ===
 streamlit>=1.37.0
+streamlit-mic-recorder
+SpeechRecognition
 
 # === LANGCHAIN ECOSYSTEM ===
 langchain>=0.2.0
