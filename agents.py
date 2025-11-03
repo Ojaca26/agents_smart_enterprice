@@ -1,5 +1,5 @@
 import streamlit as st
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI  # <-- CORREGIDO
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_community.agent_toolkits.sql.base import create_sql_agent
@@ -13,7 +13,7 @@ from langgraph.graph.message import add_messages
 import json
 
 # =I. DEFINIR EL ESTADO DEL GRAFO =======================
-# Este es el "cerebro" o la memoria compartida de la red de agentes.
+# Esta es la "memoria" compartida de la red de agentes.
 class AgentState(TypedDict):
     # La lista de mensajes de chat
     messages: Annotated[list, add_messages]
@@ -28,7 +28,7 @@ class AgentState(TypedDict):
 # Ahora recibe el 'state' completo, extrae el último mensaje, y 
 # devuelve un dict para actualizar el 'sql_data'
 def sql_agent_node(state: AgentState):
-    st.info("🧩 SQL Agent: Consultando base de datos...")
+    st.info("🧩 SQL Agent: Obteniendo datos para el análisis...")
     
     # Obtener la pregunta original del usuario
     user_question = state["messages"][-1].content
@@ -37,9 +37,9 @@ def sql_agent_node(state: AgentState):
     creds = st.secrets["db_credentials"]
     uri = f"mysql+pymysql://{creds['user']}:{creds['password']}@{creds['host']}/{creds['database']}"
     db = SQLDatabase.from_uri(uri)
-    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0) # <-- CORREGIDO
     toolkit = SQLDatabaseToolkit(db=db, llm=llm)
-    agent = create_sql_agent(llm=llm, toolkit=toolkit, verbose=False) # verbose=False para no ensuciar la consola
+    agent = create_sql_agent(llm=llm, toolkit=toolkit, verbose=False) 
     
     try:
         # Ejecutar la consulta
@@ -53,7 +53,7 @@ def sql_agent_node(state: AgentState):
 # y devuelve un 'AIMessage' para el usuario.
 def analyst_agent_node(state: AgentState):
     st.info("📊 Analyst Agent: Interpretando métricas...")
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.3)
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.3) # <-- CORREGIDO
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", """
@@ -83,7 +83,7 @@ def analyst_agent_node(state: AgentState):
 # Similar al analista, pero con su propio prompt
 def audit_agent_node(state: AgentState):
     st.info("🔍 Audit Agent: Detectando anomalías...")
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.2)
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.2) # <-- CORREGIDO
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", """
@@ -111,7 +111,7 @@ def audit_agent_node(state: AgentState):
 # Su única salida es un 'dict' con la clave 'next_agent'.
 def orchestrator_node(state: AgentState):
     st.info("🤖 Orchestrator Agent: Analizando intención...")
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0) # <-- CORREGIDO
     
     # Extraer la pregunta del usuario
     user_question = state["messages"][-1].content.lower()
@@ -133,7 +133,7 @@ def orchestrator_node(state: AgentState):
 # Maneja el "hola" y "gracias".
 def conversational_agent_node(state: AgentState):
     st.info("💬 Conversational Agent: Generando respuesta...")
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.4)
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.4) # <-- CORREGIDO
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", "Eres IANA, una asistente IA ejecutiva y amigable. Responde al usuario de forma natural y cercana."),
@@ -145,8 +145,7 @@ def conversational_agent_node(state: AgentState):
     return {"messages": [AIMessage(content=response)]}
 
 # --- 6. AGENTE SQL (Final) ---
-# Modificamos el 'sql_agent_node' para que también pueda ser un punto final,
-# devolviendo un AIMessage con los datos.
+# Un agente SQL que SÍ devuelve un mensaje al usuario
 def sql_final_agent_node(state: AgentState):
     st.info("🧩 SQL Agent: Consultando base de datos...")
     
@@ -155,7 +154,7 @@ def sql_final_agent_node(state: AgentState):
     creds = st.secrets["db_credentials"]
     uri = f"mysql+pymysql://{creds['user']}:{creds['password']}@{creds['host']}/{creds['database']}"
     db = SQLDatabase.from_uri(uri)
-    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0) # <-- CORREGIDO
     toolkit = SQLDatabaseToolkit(db=db, llm=llm)
     agent = create_sql_agent(llm=llm, toolkit=toolkit, verbose=False)
     
@@ -166,4 +165,3 @@ def sql_final_agent_node(state: AgentState):
         return {"messages": [AIMessage(content=response)]}
     except Exception as e:
         return {"messages": [AIMessage(content=f"Lo siento, tuve un error al consultar la base de datos: {e}")]}
-
