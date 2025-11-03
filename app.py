@@ -7,7 +7,7 @@
 # ==========================================================
 
 import streamlit as st
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from graph_builder import build_langgraph
 from agents import AgentState # Importamos el estado
 from typing import Optional
@@ -238,4 +238,5 @@ elif prompt_text:
 # Si tenemos una entrada (de voz o texto), la procesamos
 if prompt_a_procesar:
     procesar_pregunta(prompt_a_procesar)
+
 
