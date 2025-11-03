@@ -26,7 +26,7 @@ def build_langgraph():
     graph.add_edge("audit_agent", END)
 
     # ✅ Definir el punto de entrada (entrypoint)
-    graph.set_entrypoint("orchestrator")
+    graph.set_entry_point("orchestrator")
 
     # Compilar el grafo para ejecución
     return graph.compile()
@@ -42,3 +42,4 @@ def export_graph_mermaid(graph):
         return mermaid_code
     except Exception as e:
         return f"⚠️ Error al generar Mermaid: {e}"
+
