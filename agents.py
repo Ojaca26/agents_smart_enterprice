@@ -196,16 +196,16 @@ def sql_final_agent_node(state: AgentState):
 
         # --- 6. Ejecución del SQL ---
         st.info("⏳ Ejecutando consulta directa...")
-        engine = db._engine # Accedemos al motor de SQLAlchemy
+        engine = db._engine  # Accedemos al motor de SQLAlchemy
         with engine.connect() as conn:
             # Usamos 'text' de sqlalchemy
             if "limit" not in sql_query_limpia.lower():
                 sql_query_limpia += " LIMIT 3000"
 
             df = pd.read_sql(text(sql_query_limpia), conn)
-        
+
         st.success(f"✅ ¡Consulta ejecutada! Filas: {len(df)}")
-        
+
         # Convertir DataFrame a string para el chat
         if df.empty:
             result_string = "No se encontraron resultados para esa consulta."
@@ -229,4 +229,5 @@ def sql_final_agent_node(state: AgentState):
             return {"messages": [AIMessage(content=response)]}
         except Exception as e2:
             return {"messages": [AIMessage(content=f"Lo siento, ambos métodos de SQL fallaron. Error final: {e2}")]}
+
 
