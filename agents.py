@@ -150,7 +150,15 @@ def sql_final_agent_node(state: AgentState):
     try:
         # A diferencia de 'autollantas', no especificamos tablas
         # para que funcione con tu base de datos de IANA.
-        schema_info = db.get_table_info()
+        # Solo obtener estructura ligera (nombres + columnas relevantes)
+        tablas = ["replica_VIEW_Fact_Ingresos", "replica_VIEW_Fact_Costos", "replica_VIEW_Fact_Solicitudes",
+          "replica_VIEW_Dim_Empresa", "replica_VIEW_Dim_Concepto", "replica_VIEW_Dim_Usuario", "replica_VIEW_Dim_Ubicacion"]
+
+        schema_info = "\n".join([
+            f"{t}: {', '.join(db._engine.execute(text(f'SHOW COLUMNS FROM {t}')).fetchmany(10))}"
+            for t in tablas
+        ])
+        
     except Exception as e:
         return {"messages": [AIMessage(content=f"Error al obtener esquema de BD: {e}")]}
 
@@ -191,6 +199,9 @@ def sql_final_agent_node(state: AgentState):
         engine = db._engine # Accedemos al motor de SQLAlchemy
         with engine.connect() as conn:
             # Usamos 'text' de sqlalchemy
+            if "limit" not in sql_query_limpia.lower():
+                sql_query_limpia += " LIMIT 3000"
+
             df = pd.read_sql(text(sql_query_limpia), conn)
         
         st.success(f"✅ ¡Consulta ejecutada! Filas: {len(df)}")
@@ -209,7 +220,7 @@ def sql_final_agent_node(state: AgentState):
         # Si el método rápido falla, intentamos con el agente.
         st.warning(f"La consulta directa falló ({e}). Intentando con el Agente SQL experto...")
         try:
-            llm_agent = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0)
+            llm_agent = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
             toolkit = SQLDatabaseToolkit(db=db, llm=llm_agent)
             agent = create_sql_agent(llm=llm_agent, toolkit=toolkit, verbose=False)
             
@@ -218,3 +229,4 @@ def sql_final_agent_node(state: AgentState):
             return {"messages": [AIMessage(content=response)]}
         except Exception as e2:
             return {"messages": [AIMessage(content=f"Lo siento, ambos métodos de SQL fallaron. Error final: {e2}")]}
+
