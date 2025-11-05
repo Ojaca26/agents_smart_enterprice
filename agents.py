@@ -138,12 +138,13 @@ def sql_final_agent_node(state: AgentState):
     st.info("🧩 SQL Agent (Rápido): Generando consulta...")
     user_question = state["messages"][-1].content
 
+    # --- 1. Conexión y LLM ---
     creds = st.secrets["db_credentials"]
     uri = f"mysql+pymysql://{creds['user']}:{creds['password']}@{creds['host']}/{creds['database']}"
     db = SQLDatabase.from_uri(uri)
     llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.0)
 
-    # --- 2. Obtener esquema liviano ---
+    # --- 2. Obtener esquema liviano (corregido + trazas visibles) ---
     try:
         tablas = [
             "replica_VIEW_Fact_Ingresos",
@@ -154,66 +155,80 @@ def sql_final_agent_node(state: AgentState):
             "replica_VIEW_Dim_Usuario",
             "replica_VIEW_Dim_Ubicacion"
         ]
+
         schema_info = ""
         with db._engine.connect() as conn:
             for t in tablas:
                 try:
-                    columnas = conn.execute(text(f"SHOW COLUMNS FROM {t}")).fetchmany(8)
+                    columnas = conn.exec_driver_sql(f"SHOW COLUMNS FROM {t}").fetchmany(8)
                     col_names = [c[0] for c in columnas]
                     schema_info += f"{t}: {', '.join(col_names)}\n"
                 except Exception as e:
                     schema_info += f"{t}: (Error al obtener columnas: {e})\n"
 
-    except Exception as e:
-        return {"messages": [AIMessage(content=f"Error al obtener esquema de BD: {e}")]} 
+        st.success("✅ Esquema obtenido correctamente.")
+        st.text_area("📘 Esquema de base de datos (resumen)", schema_info, height=180)
 
-    # --- 3. Prompt para el LLM ---
+    except Exception as e:
+        st.error(f"❌ Error al obtener esquema de BD: {e}")
+        return {"messages": [AIMessage(content=f"Error al obtener esquema de BD: {e}")]}
+
+    # --- 3. Construir el prompt del modelo ---
     prompt_con_instrucciones = f"""
-    Genera una consulta SQL limpia (SOLO SELECT) según el siguiente esquema.
+    Genera una consulta SQL limpia (SOLO SELECT) para responder la pregunta.
+    Usa el siguiente esquema de base de datos:
 
     --- ESQUEMA ---
     {schema_info}
-    --- FIN ---
+    --- FIN DEL ESQUEMA ---
 
     Reglas:
     1. Usa YEAR() y MONTH() para fechas.
-    2. Si mencionan "2025", filtra con YEAR(ID_Fecha)=2025.
-    3. Usa los nombres de columnas tal cual están arriba.
+    2. Si se menciona "2025", filtra con YEAR(ID_Fecha)=2025.
+    3. Usa los nombres de columnas tal cual aparecen en el esquema.
+    4. No uses alias raros ni funciones desconocidas.
 
     Pregunta:
     {user_question}
+
+    Devuelve SOLO el SQL (sin ```sql ni comentarios).
     """
 
+    # --- 4. Generar el SQL con el LLM ---
     try:
         sql_query_bruta = llm.invoke(prompt_con_instrucciones).content
+        st.info("🧠 SQL crudo generado por el modelo:")
         st.code(sql_query_bruta, language="sql")
 
         sql_query_limpia = limpiar_sql(sql_query_bruta)
         sql_query_limpia = _asegurar_select_only(sql_query_limpia)
 
         if not sql_query_limpia:
+            st.error("❌ El SQL generado está vacío o no es válido.")
             return {"messages": [AIMessage(content="No se generó una consulta SQL válida.")]}
 
-        # --- 4. Ejecutar SQL ---
+        st.success("✅ SQL limpio y validado:")
+        st.code(sql_query_limpia, language="sql")
+
+        # --- 5. Ejecutar SQL (con límite por seguridad) ---
         st.info("⏳ Ejecutando consulta directa...")
-        engine = db._engine
-        with engine.connect() as conn:
+        with db._engine.connect() as conn:
             if "limit" not in sql_query_limpia.lower():
                 sql_query_limpia += " LIMIT 3000"
             df = pd.read_sql(text(sql_query_limpia), conn)
 
-        st.success(f"✅ ¡Consulta ejecutada! Filas: {len(df)}")
+        st.success(f"✅ ¡Consulta ejecutada correctamente! Filas devueltas: {len(df)}")
 
         if df.empty:
             result_string = "No se encontraron resultados para esa consulta."
         else:
             result_string = df.to_markdown(index=False)
 
-        response = f"¡Claro! Aquí tienes los datos solicitados:\n\n{result_string}"
+        response = f"🧩 Consulta ejecutada con éxito:\n\n```sql\n{sql_query_limpia}\n```\n\n{result_string}"
         return {"messages": [AIMessage(content=response)]}
 
     except Exception as e:
-        st.warning(f"⚠️ Consulta directa falló ({e}). Usando modo experto...")
+        st.warning(f"⚠️ Error en ejecución directa: {e}. Activando modo experto...")
         try:
             llm_agent = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0)
             toolkit = SQLDatabaseToolkit(db=db, llm=llm_agent)
@@ -222,4 +237,6 @@ def sql_final_agent_node(state: AgentState):
             response = f"Usé el modo experto y esto encontré:\n\n```\n{result}\n```"
             return {"messages": [AIMessage(content=response)]}
         except Exception as e2:
+            st.error(f"❌ Error en ambos métodos: {e2}")
             return {"messages": [AIMessage(content=f"❌ Error crítico: {e2}")]}
+
