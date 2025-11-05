@@ -6,15 +6,14 @@ from langchain_community.agent_toolkits.sql.base import create_sql_agent
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
-
 from typing import TypedDict, Optional, Annotated
 from langgraph.graph.message import add_messages
-import re
-import pandas as pd
 from sqlalchemy import text
+import pandas as pd
+import re
 
 # ======================================================
-#  I.  ESTADO DEL GRAFO
+# 1️⃣ ESTADO DEL GRAFO
 # ======================================================
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
@@ -23,9 +22,10 @@ class AgentState(TypedDict):
 
 
 # ======================================================
-#  II. FUNCIONES AUXILIARES
+# 2️⃣ FUNCIONES AUXILIARES
 # ======================================================
 def limpiar_sql(sql_texto: str) -> str:
+    """Limpia texto generado por el LLM para dejar solo el SELECT."""
     if not sql_texto:
         return ""
     limpio = re.sub(r'```sql|```', '', sql_texto, flags=re.I)
@@ -37,6 +37,7 @@ def limpiar_sql(sql_texto: str) -> str:
 
 
 def _asegurar_select_only(sql: str) -> str:
+    """Evita que se ejecuten sentencias distintas de SELECT."""
     sql_clean = sql.strip().rstrip(';')
     if not re.match(r'(?is)^\s*select\b', sql_clean):
         raise ValueError("Solo se permite ejecutar consultas SELECT.")
@@ -45,12 +46,39 @@ def _asegurar_select_only(sql: str) -> str:
 
 
 # ======================================================
-#  III. AGENTES INDIVIDUALES
+# 3️⃣ FUNCIÓN CACHEADA: ESQUEMA LIVIANO
+# ======================================================
+@st.cache_data(ttl=600)
+def get_schema_info(db) -> str:
+    """Obtiene las columnas de las principales vistas de negocio."""
+    tablas = [
+        "replica_VIEW_Fact_Ingresos",
+        "replica_VIEW_Fact_Costos",
+        "replica_VIEW_Fact_Solicitudes",
+        "replica_VIEW_Dim_Empresa",
+        "replica_VIEW_Dim_Concepto",
+        "replica_VIEW_Dim_Usuario",
+        "replica_VIEW_Dim_Ubicacion"
+    ]
+
+    schema_info = ""
+    with db._engine.connect() as conn:
+        for t in tablas:
+            try:
+                columnas = conn.exec_driver_sql(f"SHOW COLUMNS FROM {t}").fetchmany(8)
+                col_names = [c[0] for c in columnas]
+                schema_info += f"{t}: {', '.join(col_names)}\n"
+            except Exception as e:
+                schema_info += f"{t}: (Error al obtener columnas: {e})\n"
+    return schema_info
+
+
+# ======================================================
+# 4️⃣ AGENTES SECUNDARIOS
 # ======================================================
 def sql_agent_node(state: AgentState):
-    st.info("🧩 SQL Agent: Obteniendo datos para el análisis...")
+    st.info("🧩 SQL Agent (Lento - plan B): obteniendo datos...")
     user_question = state["messages"][-1].content
-
     creds = st.secrets["db_credentials"]
     uri = f"mysql+pymysql://{creds['user']}:{creds['password']}@{creds['host']}/{creds['database']}"
     db = SQLDatabase.from_uri(uri)
@@ -66,14 +94,14 @@ def sql_agent_node(state: AgentState):
 
 
 def analyst_agent_node(state: AgentState):
-    st.info("📊 Analyst Agent: Interpretando métricas...")
+    st.info("📊 Analyst Agent: interpretando métricas...")
     llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.3)
     prompt = ChatPromptTemplate.from_messages([
         ("system", f"""
-         Eres un analista financiero experto.
-         Con base en estos datos: {state['sql_data']}
-         y la conversación previa, responde la última pregunta del usuario.
-         """),
+        Eres un analista financiero experto.
+        Con base en estos datos: {state['sql_data']}
+        y la conversación previa, responde la última pregunta del usuario.
+        """),
         MessagesPlaceholder(variable_name="messages")
     ])
     chain = prompt | llm | StrOutputParser()
@@ -82,17 +110,17 @@ def analyst_agent_node(state: AgentState):
 
 
 def audit_agent_node(state: AgentState):
-    st.info("🔍 Audit Agent: Detectando anomalías...")
+    st.info("🔍 Audit Agent: detectando anomalías...")
     llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.2)
     prompt = ChatPromptTemplate.from_messages([
         ("system", f"""
-         Actúa como auditor de operaciones.
-         Analiza los siguientes datos: {state['sql_data']}
-         y detecta:
-         - Inconsistencias o valores anómalos
-         - Desviaciones frente a metas
-         - Riesgos o alertas importantes
-         """),
+        Actúa como auditor de operaciones.
+        Analiza los siguientes datos: {state['sql_data']}
+        y detecta:
+        - Inconsistencias o valores anómalos
+        - Desviaciones frente a metas
+        - Riesgos o alertas importantes.
+        """),
         MessagesPlaceholder(variable_name="messages")
     ])
     chain = prompt | llm | StrOutputParser()
@@ -101,7 +129,7 @@ def audit_agent_node(state: AgentState):
 
 
 def orchestrator_node(state: AgentState):
-    st.info("🤖 Orchestrator Agent: Analizando intención...")
+    st.info("🤖 Orchestrator Agent: analizando intención...")
     llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0)
     user_question = state["messages"][-1].content.lower()
 
@@ -114,12 +142,12 @@ def orchestrator_node(state: AgentState):
     else:
         next_agent = "conversational_agent"
 
-    st.success(f"🗣️ Gerente Virtual (IA): Intención detectada → {next_agent}")
+    st.success(f"🗣️ Intención detectada → {next_agent}")
     return {"next_agent": next_agent}
 
 
 def conversational_agent_node(state: AgentState):
-    st.info("💬 Conversational Agent: Generando respuesta...")
+    st.info("💬 Conversational Agent: respondiendo de forma natural...")
     llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.4)
     prompt = ChatPromptTemplate.from_messages([
         ("system", "Eres IANA, una asistente IA ejecutiva y amigable."),
@@ -131,52 +159,25 @@ def conversational_agent_node(state: AgentState):
 
 
 # ======================================================
-#  VI.  AGENTE SQL RÁPIDO (OPTIMIZADO)
+# 5️⃣ AGENTE SQL RÁPIDO (VERSIÓN ESTABLE)
 # ======================================================
-@st.cache_data(ttl=600)
 def sql_final_agent_node(state: AgentState):
     st.info("🧩 SQL Agent (Rápido): Generando consulta...")
     user_question = state["messages"][-1].content
 
-    # --- 1. Conexión y LLM ---
+    # --- 1. Conexión y modelo ---
     creds = st.secrets["db_credentials"]
     uri = f"mysql+pymysql://{creds['user']}:{creds['password']}@{creds['host']}/{creds['database']}"
     db = SQLDatabase.from_uri(uri)
     llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.0)
 
-    # --- 2. Obtener esquema liviano (corregido + trazas visibles) ---
-    try:
-        tablas = [
-            "replica_VIEW_Fact_Ingresos",
-            "replica_VIEW_Fact_Costos",
-            "replica_VIEW_Fact_Solicitudes",
-            "replica_VIEW_Dim_Empresa",
-            "replica_VIEW_Dim_Concepto",
-            "replica_VIEW_Dim_Usuario",
-            "replica_VIEW_Dim_Ubicacion"
-        ]
+    # --- 2. Obtener esquema desde cache ---
+    schema_info = get_schema_info(db)
+    st.text_area("📘 Esquema de base de datos (resumen)", schema_info, height=180)
 
-        schema_info = ""
-        with db._engine.connect() as conn:
-            for t in tablas:
-                try:
-                    columnas = conn.exec_driver_sql(f"SHOW COLUMNS FROM {t}").fetchmany(8)
-                    col_names = [c[0] for c in columnas]
-                    schema_info += f"{t}: {', '.join(col_names)}\n"
-                except Exception as e:
-                    schema_info += f"{t}: (Error al obtener columnas: {e})\n"
-
-        st.success("✅ Esquema obtenido correctamente.")
-        st.text_area("📘 Esquema de base de datos (resumen)", schema_info, height=180)
-
-    except Exception as e:
-        st.error(f"❌ Error al obtener esquema de BD: {e}")
-        return {"messages": [AIMessage(content=f"Error al obtener esquema de BD: {e}")]}
-
-    # --- 3. Construir el prompt del modelo ---
+    # --- 3. Prompt del LLM ---
     prompt_con_instrucciones = f"""
-    Genera una consulta SQL limpia (SOLO SELECT) para responder la pregunta.
-    Usa el siguiente esquema de base de datos:
+    Genera una consulta SQL limpia (SOLO SELECT) basada en este esquema:
 
     --- ESQUEMA ---
     {schema_info}
@@ -184,40 +185,36 @@ def sql_final_agent_node(state: AgentState):
 
     Reglas:
     1. Usa YEAR() y MONTH() para fechas.
-    2. Si se menciona "2025", filtra con YEAR(ID_Fecha)=2025.
-    3. Usa los nombres de columnas tal cual aparecen en el esquema.
-    4. No uses alias raros ni funciones desconocidas.
+    2. Si el usuario menciona un año, filtra con YEAR(ID_Fecha)=año.
+    3. Usa nombres exactos de columnas.
+    4. No incluyas alias ni comentarios.
 
     Pregunta:
     {user_question}
-
-    Devuelve SOLO el SQL (sin ```sql ni comentarios).
     """
 
-    # --- 4. Generar el SQL con el LLM ---
+    # --- 4. Generar SQL ---
     try:
         sql_query_bruta = llm.invoke(prompt_con_instrucciones).content
-        st.info("🧠 SQL crudo generado por el modelo:")
+        st.info("🧠 SQL generado por el modelo:")
         st.code(sql_query_bruta, language="sql")
 
         sql_query_limpia = limpiar_sql(sql_query_bruta)
         sql_query_limpia = _asegurar_select_only(sql_query_limpia)
-
         if not sql_query_limpia:
-            st.error("❌ El SQL generado está vacío o no es válido.")
             return {"messages": [AIMessage(content="No se generó una consulta SQL válida.")]}
 
         st.success("✅ SQL limpio y validado:")
         st.code(sql_query_limpia, language="sql")
 
-        # --- 5. Ejecutar SQL (con límite por seguridad) ---
+        # --- 5. Ejecutar SQL ---
         st.info("⏳ Ejecutando consulta directa...")
         with db._engine.connect() as conn:
             if "limit" not in sql_query_limpia.lower():
                 sql_query_limpia += " LIMIT 3000"
             df = pd.read_sql(text(sql_query_limpia), conn)
 
-        st.success(f"✅ ¡Consulta ejecutada correctamente! Filas devueltas: {len(df)}")
+        st.success(f"✅ ¡Consulta ejecutada! Filas devueltas: {len(df)}")
 
         if df.empty:
             result_string = "No se encontraron resultados para esa consulta."
@@ -237,6 +234,4 @@ def sql_final_agent_node(state: AgentState):
             response = f"Usé el modo experto y esto encontré:\n\n```\n{result}\n```"
             return {"messages": [AIMessage(content=response)]}
         except Exception as e2:
-            st.error(f"❌ Error en ambos métodos: {e2}")
             return {"messages": [AIMessage(content=f"❌ Error crítico: {e2}")]}
-
