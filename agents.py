@@ -136,6 +136,7 @@ def conversational_agent_node(state: AgentState):
 
 
 # --- 6. AGENTE SQL (Final - ¡AHORA ES EL MÉTODO RÁPIDO!) ---
+@st.cache_data(ttl=600)
 def sql_final_agent_node(state: AgentState):
     st.info("🧩 SQL Agent (Rápido): Generando consulta...")
     user_question = state["messages"][-1].content
@@ -238,6 +239,7 @@ def sql_final_agent_node(state: AgentState):
             return {"messages": [AIMessage(content=response)]}
         except Exception as e2:
             return {"messages": [AIMessage(content=f"Lo siento, ambos métodos de SQL fallaron. Error final: {e2}")]}
+
 
 
 
