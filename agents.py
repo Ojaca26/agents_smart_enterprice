@@ -148,17 +148,26 @@ def sql_final_agent_node(state: AgentState):
 
     # --- 2. Obtener Esquema (Paso clave) ---
     try:
-        # A diferencia de 'autollantas', no especificamos tablas
-        # para que funcione con tu base de datos de IANA.
-        # Solo obtener estructura ligera (nombres + columnas relevantes)
-        tablas = ["replica_VIEW_Fact_Ingresos", "replica_VIEW_Fact_Costos", "replica_VIEW_Fact_Solicitudes",
-          "replica_VIEW_Dim_Empresa", "replica_VIEW_Dim_Concepto", "replica_VIEW_Dim_Usuario", "replica_VIEW_Dim_Ubicacion"]
+        tablas = [
+            "replica_VIEW_Fact_Ingresos",
+            "replica_VIEW_Fact_Costos",
+            "replica_VIEW_Fact_Solicitudes",
+            "replica_VIEW_Dim_Empresa",
+            "replica_VIEW_Dim_Concepto",
+            "replica_VIEW_Dim_Usuario",
+            "replica_VIEW_Dim_Ubicacion"
+        ]
 
-        schema_info = "\n".join([
-            f"{t}: {', '.join(db._engine.execute(text(f'SHOW COLUMNS FROM {t}')).fetchmany(10))}"
-            for t in tablas
-        ])
-        
+        schema_info = ""
+        with db._engine.connect() as conn:
+            for t in tablas:
+                try:
+                    columnas = conn.execute(text(f"SHOW COLUMNS FROM {t}")).fetchmany(8)
+                    col_names = [c[0] for c in columnas]
+                    schema_info += f"{t}: {', '.join(col_names)}\n"
+                except Exception as e:
+                    schema_info += f"{t}: (Error al obtener columnas: {e})\n"
+
     except Exception as e:
         return {"messages": [AIMessage(content=f"Error al obtener esquema de BD: {e}")]}
 
@@ -229,5 +238,6 @@ def sql_final_agent_node(state: AgentState):
             return {"messages": [AIMessage(content=response)]}
         except Exception as e2:
             return {"messages": [AIMessage(content=f"Lo siento, ambos métodos de SQL fallaron. Error final: {e2}")]}
+
 
 
