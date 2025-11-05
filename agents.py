@@ -13,7 +13,7 @@ import pandas as pd
 import re
 
 # ======================================================
-# 1️⃣ ESTADO DEL GRAFO
+# 🧠 1) ESTADO DEL GRAFO
 # ======================================================
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
@@ -22,7 +22,7 @@ class AgentState(TypedDict):
 
 
 # ======================================================
-# 2️⃣ FUNCIONES AUXILIARES
+# ⚙️ 2) FUNCIONES AUXILIARES
 # ======================================================
 def limpiar_sql(sql_texto: str) -> str:
     """Limpia texto generado por el LLM para dejar solo el SELECT."""
@@ -46,10 +46,10 @@ def _asegurar_select_only(sql: str) -> str:
 
 
 # ======================================================
-# 3️⃣ FUNCIÓN CACHEADA: ESQUEMA LIVIANO
+# 🗄️ 3) FUNCIÓN CACHEADA: ESQUEMA LIVIANO
 # ======================================================
 @st.cache_data(ttl=600)
-def get_schema_info(db) -> str:
+def get_schema_info(_db) -> str:
     """Obtiene las columnas de las principales vistas de negocio."""
     tablas = [
         "replica_VIEW_Fact_Ingresos",
@@ -62,7 +62,7 @@ def get_schema_info(db) -> str:
     ]
 
     schema_info = ""
-    with db._engine.connect() as conn:
+    with _db._engine.connect() as conn:
         for t in tablas:
             try:
                 columnas = conn.exec_driver_sql(f"SHOW COLUMNS FROM {t}").fetchmany(8)
@@ -74,10 +74,10 @@ def get_schema_info(db) -> str:
 
 
 # ======================================================
-# 4️⃣ AGENTES SECUNDARIOS
+# 🤖 4) AGENTES SECUNDARIOS
 # ======================================================
 def sql_agent_node(state: AgentState):
-    st.info("🧩 SQL Agent (Lento - plan B): obteniendo datos...")
+    st.info("🧩 SQL Agent (Lento - Plan B): obteniendo datos...")
     user_question = state["messages"][-1].content
     creds = st.secrets["db_credentials"]
     uri = f"mysql+pymysql://{creds['user']}:{creds['password']}@{creds['host']}/{creds['database']}"
@@ -159,7 +159,7 @@ def conversational_agent_node(state: AgentState):
 
 
 # ======================================================
-# 5️⃣ AGENTE SQL RÁPIDO (VERSIÓN ESTABLE)
+# ⚡ 5) AGENTE SQL RÁPIDO (FINAL)
 # ======================================================
 def sql_final_agent_node(state: AgentState):
     st.info("🧩 SQL Agent (Rápido): Generando consulta...")
@@ -175,7 +175,7 @@ def sql_final_agent_node(state: AgentState):
     schema_info = get_schema_info(db)
     st.text_area("📘 Esquema de base de datos (resumen)", schema_info, height=180)
 
-    # --- 3. Prompt del LLM ---
+    # --- 3. Prompt para el LLM ---
     prompt_con_instrucciones = f"""
     Genera una consulta SQL limpia (SOLO SELECT) basada en este esquema:
 
