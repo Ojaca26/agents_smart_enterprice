@@ -11,6 +11,7 @@ from langgraph.graph.message import add_messages
 from sqlalchemy import text
 import pandas as pd
 import re
+import time
 
 # ======================================================
 # 🧠 1) ESTADO DEL GRAFO
@@ -159,87 +160,103 @@ def conversational_agent_node(state: AgentState):
 
 
 # ======================================================
-# ⚡ 5) AGENTE SQL RÁPIDO (FINAL)
+# ⚡ 5) AGENTE SQL RÁPIDO CON EFECTO VISUAL (FINAL)
 # ======================================================
 def sql_final_agent_node(state: AgentState):
-    st.info("🧩 SQL Agent (Rápido): Generando consulta...")
     user_question = state["messages"][-1].content
+    st.info("🧩 SQL Agent (Rápido): Generando consulta...")
+    st.markdown(f"💬 **Pregunta del usuario:** _{user_question}_")
 
-    # --- 1. Conexión y modelo ---
+    # --- Conexión y modelo ---
     creds = st.secrets["db_credentials"]
     uri = f"mysql+pymysql://{creds['user']}:{creds['password']}@{creds['host']}/{creds['database']}"
     db = SQLDatabase.from_uri(uri)
-
-    # ⚡ Modelo más rápido y estable
     llm = ChatGoogleGenerativeAI(
         model="gemini-1.5-flash-latest",
         temperature=0.0,
         max_output_tokens=1024,
-        timeout=45  # ⏱️ evita quedarse pensando
+        timeout=40
     )
 
-    # --- 2. Obtener esquema desde cache ---
-    schema_info = get_schema_info(db)
+    # --- Obtener esquema ---
+    with st.spinner("📘 Obteniendo esquema de base de datos..."):
+        schema_info = get_schema_info(db)
     st.text_area("📘 Esquema de base de datos (resumen)", schema_info, height=180)
 
-    # --- 3. Prompt del modelo ---
+    # --- Crear prompt ---
     prompt_con_instrucciones = f"""
-    Eres un experto en SQL. Genera una consulta SELECT válida para MySQL
-    que calcule los ingresos acumulados del año 2025.
-    Usa exclusivamente el siguiente esquema:
+    Eres un experto en SQL para MySQL/MariaDB.
+    Genera una consulta SELECT válida que responda a:
+    "{user_question}"
+    usando las columnas disponibles:
 
-    --- ESQUEMA ---
     {schema_info}
-    --- FIN ---
 
     Reglas:
-    1. Si mencionan "ingresos", usa replica_VIEW_Fact_Ingresos y la columna Valor_Facturado.
-    2. Si mencionan un año, usa YEAR(ID_Fecha)=año.
-    3. Usa SUM(Valor_Facturado) como métrica principal.
-    4. Devuelve solo la consulta SQL limpia, sin comentarios ni ```sql.
-    Pregunta: {user_question}
+    - Si mencionan 'ingresos', usa replica_VIEW_Fact_Ingresos y la columna Valor_Facturado.
+    - Si se menciona un año, usa YEAR(ID_Fecha)=año.
+    - Usa SUM(Valor_Facturado) para calcular ingresos acumulados.
+    - Devuelve solo la consulta SQL sin comentarios.
     """
 
+    # --- Generar SQL ---
+    st.info("🤖 Solicitando al modelo que genere SQL...")
     try:
-        st.info("🤖 Solicitando al modelo que genere SQL...")
-        sql_query_bruta = llm.invoke(prompt_con_instrucciones).content.strip()
+        with st.spinner("💭 IANA está pensando..."):
+            sql_query_bruta = llm.invoke(prompt_con_instrucciones).content.strip()
         if not sql_query_bruta:
             raise ValueError("El modelo no devolvió ninguna consulta SQL.")
         st.code(sql_query_bruta, language="sql")
+    except Exception as e:
+        st.error(f"❌ Error al generar SQL: {e}")
+        return {"messages": [AIMessage(content=f"Error al generar SQL: {e}")]}
 
+    # --- Limpiar SQL ---
+    try:
         sql_query_limpia = limpiar_sql(sql_query_bruta)
         sql_query_limpia = _asegurar_select_only(sql_query_limpia)
+    except Exception as e:
+        st.error(f"⚠️ SQL inválido: {e}")
+        return {"messages": [AIMessage(content=f"SQL inválido: {e}")]}
 
-        st.success("✅ SQL validado:")
-        st.code(sql_query_limpia, language="sql")
+    st.success("✅ SQL limpio y validado:")
+    st.code(sql_query_limpia, language="sql")
 
-        # --- 4. Ejecutar la consulta ---
-        st.info("⚙️ Ejecutando consulta SQL...")
+    # --- Ejecutar consulta ---
+    progress_bar = st.progress(0, text="⏳ Ejecutando consulta...")
+    try:
         with db._engine.connect() as conn:
+            progress_bar.progress(40, text="🛰️ Enviando consulta...")
             if "limit" not in sql_query_limpia.lower():
                 sql_query_limpia += " LIMIT 3000"
             df = pd.read_sql(text(sql_query_limpia), conn)
+            progress_bar.progress(100, text="✅ Consulta completada")
 
-        st.success(f"✅ Consulta ejecutada. Filas devueltas: {len(df)}")
+        progress_bar.empty()
+        st.success(f"✅ ¡Consulta ejecutada! Filas devueltas: {len(df)}")
 
+        # --- Efecto de escritura (typing) ---
         if df.empty:
-            response = "No se encontraron resultados para la consulta."
+            respuesta_final = "No se encontraron resultados para esa consulta."
         else:
-            response = df.to_markdown(index=False)
+            respuesta_final = (
+                f"🧩 Consulta ejecutada con éxito:\n\n```sql\n{sql_query_limpia}\n```\n\n"
+                + df.to_markdown(index=False)
+            )
 
-        return {
-            "messages": [
-                AIMessage(
-                    content=f"🧩 Consulta ejecutada con éxito:\n\n```sql\n{sql_query_limpia}\n```\n\n{response}"
-                )
-            ]
-        }
+        placeholder = st.empty()
+        typed = ""
+        for char in respuesta_final:
+            typed += char
+            placeholder.markdown(typed)
+            time.sleep(0.002)
+
+        return {"messages": [AIMessage(content=respuesta_final)]}
 
     except Exception as e:
-        st.error(f"❌ Error en ejecución directa: {e}")
-        # --- PLAN B (fallback a agente SQL completo) ---
+        progress_bar.empty()
+        st.warning(f"⚠️ Error en ejecución directa: {e}. Activando modo experto...")
         try:
-            st.warning("Activando modo experto de respaldo...")
             llm_agent = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0)
             toolkit = SQLDatabaseToolkit(db=db, llm=llm_agent)
             agent = create_sql_agent(llm=llm_agent, toolkit=toolkit, verbose=False)
@@ -248,4 +265,3 @@ def sql_final_agent_node(state: AgentState):
         except Exception as e2:
             st.error(f"❌ Error crítico: {e2}")
             return {"messages": [AIMessage(content=f"Error crítico: {e2}")]}
-
