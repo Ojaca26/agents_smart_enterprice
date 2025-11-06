@@ -169,69 +169,83 @@ def sql_final_agent_node(state: AgentState):
     creds = st.secrets["db_credentials"]
     uri = f"mysql+pymysql://{creds['user']}:{creds['password']}@{creds['host']}/{creds['database']}"
     db = SQLDatabase.from_uri(uri)
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.0)
+
+    # ⚡ Modelo más rápido y estable
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash-latest",
+        temperature=0.0,
+        max_output_tokens=1024,
+        timeout=45  # ⏱️ evita quedarse pensando
+    )
 
     # --- 2. Obtener esquema desde cache ---
     schema_info = get_schema_info(db)
     st.text_area("📘 Esquema de base de datos (resumen)", schema_info, height=180)
 
-    # --- 3. Prompt para el LLM ---
+    # --- 3. Prompt del modelo ---
     prompt_con_instrucciones = f"""
-    Genera una consulta SQL limpia (SOLO SELECT) basada en este esquema:
+    Eres un experto en SQL. Genera una consulta SELECT válida para MySQL
+    que calcule los ingresos acumulados del año 2025.
+    Usa exclusivamente el siguiente esquema:
 
     --- ESQUEMA ---
     {schema_info}
-    --- FIN DEL ESQUEMA ---
+    --- FIN ---
 
     Reglas:
-    1. Usa YEAR() y MONTH() para fechas.
-    2. Si el usuario menciona un año, filtra con YEAR(ID_Fecha)=año.
-    3. Usa nombres exactos de columnas.
-    4. No incluyas alias ni comentarios.
-
-    Pregunta:
-    {user_question}
+    1. Si mencionan "ingresos", usa replica_VIEW_Fact_Ingresos y la columna Valor_Facturado.
+    2. Si mencionan un año, usa YEAR(ID_Fecha)=año.
+    3. Usa SUM(Valor_Facturado) como métrica principal.
+    4. Devuelve solo la consulta SQL limpia, sin comentarios ni ```sql.
+    Pregunta: {user_question}
     """
 
-    # --- 4. Generar SQL ---
     try:
-        sql_query_bruta = llm.invoke(prompt_con_instrucciones).content
-        st.info("🧠 SQL generado por el modelo:")
+        st.info("🤖 Solicitando al modelo que genere SQL...")
+        sql_query_bruta = llm.invoke(prompt_con_instrucciones).content.strip()
+        if not sql_query_bruta:
+            raise ValueError("El modelo no devolvió ninguna consulta SQL.")
         st.code(sql_query_bruta, language="sql")
 
         sql_query_limpia = limpiar_sql(sql_query_bruta)
         sql_query_limpia = _asegurar_select_only(sql_query_limpia)
-        if not sql_query_limpia:
-            return {"messages": [AIMessage(content="No se generó una consulta SQL válida.")]}
 
-        st.success("✅ SQL limpio y validado:")
+        st.success("✅ SQL validado:")
         st.code(sql_query_limpia, language="sql")
 
-        # --- 5. Ejecutar SQL ---
-        st.info("⏳ Ejecutando consulta directa...")
+        # --- 4. Ejecutar la consulta ---
+        st.info("⚙️ Ejecutando consulta SQL...")
         with db._engine.connect() as conn:
             if "limit" not in sql_query_limpia.lower():
                 sql_query_limpia += " LIMIT 3000"
             df = pd.read_sql(text(sql_query_limpia), conn)
 
-        st.success(f"✅ ¡Consulta ejecutada! Filas devueltas: {len(df)}")
+        st.success(f"✅ Consulta ejecutada. Filas devueltas: {len(df)}")
 
         if df.empty:
-            result_string = "No se encontraron resultados para esa consulta."
+            response = "No se encontraron resultados para la consulta."
         else:
-            result_string = df.to_markdown(index=False)
+            response = df.to_markdown(index=False)
 
-        response = f"🧩 Consulta ejecutada con éxito:\n\n```sql\n{sql_query_limpia}\n```\n\n{result_string}"
-        return {"messages": [AIMessage(content=response)]}
+        return {
+            "messages": [
+                AIMessage(
+                    content=f"🧩 Consulta ejecutada con éxito:\n\n```sql\n{sql_query_limpia}\n```\n\n{response}"
+                )
+            ]
+        }
 
     except Exception as e:
-        st.warning(f"⚠️ Error en ejecución directa: {e}. Activando modo experto...")
+        st.error(f"❌ Error en ejecución directa: {e}")
+        # --- PLAN B (fallback a agente SQL completo) ---
         try:
+            st.warning("Activando modo experto de respaldo...")
             llm_agent = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0)
             toolkit = SQLDatabaseToolkit(db=db, llm=llm_agent)
             agent = create_sql_agent(llm=llm_agent, toolkit=toolkit, verbose=False)
             result = agent.run(user_question)
-            response = f"Usé el modo experto y esto encontré:\n\n```\n{result}\n```"
-            return {"messages": [AIMessage(content=response)]}
+            return {"messages": [AIMessage(content=f"Modo experto → Resultado:\n\n{result}")]}
         except Exception as e2:
-            return {"messages": [AIMessage(content=f"❌ Error crítico: {e2}")]}
+            st.error(f"❌ Error crítico: {e2}")
+            return {"messages": [AIMessage(content=f"Error crítico: {e2}")]}
+
