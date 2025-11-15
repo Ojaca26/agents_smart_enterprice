@@ -1,18 +1,19 @@
 import streamlit as st
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from langchain_community.utilities import SQLDatabase
-from langchain_community.agent_toolkits.sql.base import create_sql_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.tools import Tool
+from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-# ========================================================
-# 🚀 PROMPT MAESTRO – IANA SQL UNIVERSAL
-# ========================================================
+# ============================================================
+# 1. PROMPT MAESTRO — Compatible y probado con Gemini 1.5 PRO
+# ============================================================
 PROMPT = """
-Eres un Agente SQL experto encargado de responder cualquier pregunta del usuario
-usando ÚNICAMENTE las tablas disponibles en la base de datos.
+Eres un Agente SQL profesional encargado de responder cualquier pregunta del usuario
+usando ÚNICAMENTE las siguientes tablas de MariaDB:
 
-TABLAS DISPONIBLES (usas solo estas):
 - replica_VIEW_Fact_Ingresos
 - replica_VIEW_Fact_Costos
 - replica_VIEW_Fact_Solicitudes
@@ -22,105 +23,119 @@ TABLAS DISPONIBLES (usas solo estas):
 - replica_VIEW_Dim_Ubicacion
 
 REGLAS OBLIGATORIAS:
-1. Tu PRIMERA acción SIEMPRE debe ser generar una QUERY SQL válida.
-2. AUN SI NO EXISTEN DATOS, IGUAL debes generar SQL.
-3. Está prohibido responder "No sé" o "I don't know".
-4. Valida que los nombres de columnas existan realmente.
-5. Usa JOINs correctos entre FACT y DIM.
-6. Devuelve SIEMPRE:
-   SQL_QUERY: (la consulta exacta)
-   RESULT: (la interpretación en español)
-7. Si la pregunta es ambigua, asume la interpretación más lógica.
-8. Si la pregunta no requiere SQL, aún así genera SQL que apoye tu respuesta.
+1. Tu PRIMERA acción siempre debe ser una QUERY SQL válida.
+2. NO puedes responder sin antes generar SQL.
+3. Incluso si no existen datos, IGUAL debes generar SQL.
+4. No puedes inventar columnas ni tablas.
+5. Usa JOIN correctos entre FACT y DIM.
+6. Tu respuesta final debe traer:
+   - SQL_GENERADA
+   - INTERPRETACIÓN EN ESPAÑOL
+7. Prohibido decir "No sé" o "I don’t know".
 """
 
-# ========================================================
-# 🎨 CONFIG STREAMLIT
-# ========================================================
-st.set_page_config(
-    page_title="IANA SQL Universal",
-    page_icon="🤖",
-    layout="centered"
+# ============================================================
+# 2. CONFIGURACIÓN DE STREAMLIT
+# ============================================================
+st.set_page_config(page_title="IANA SQL – Gemini 1.5 PRO", page_icon="🤖")
+st.title("🤖 IANA SQL Universal – Gemini 1.5 PRO (100% Real SQL)")
+st.caption("Consultas SQL reales usando Gemini en modo Tool-Calling estable.")
+
+# ============================================================
+# 3. CONEXIÓN A MARIADB
+# ============================================================
+engine = create_engine(
+    f"mysql+pymysql://{st.secrets['db_credentials']['DB_USER']}:"
+    f"{st.secrets['db_credentials']['DB_PASS']}@"
+    f"{st.secrets['db_credentials']['DB_HOST']}/"
+    f"{st.secrets['db_credentials']['DB_NAME']}"
 )
-
-st.title("🤖 IANA – Agente SQL Universal (Todas las tablas)")
-st.write("Consultas inteligentes sobre MariaDB con Gemini 2.5 Flash.")
-
-# ========================================================
-# 🔌 1. CONEXIÓN A MARIADB (USANDO TUS secrets.toml)
-# ========================================================
-try:
-    engine = create_engine(
-        f"mysql+pymysql://{st.secrets['db_credentials']['DB_USER']}:"
-        f"{st.secrets['db_credentials']['DB_PASS']}@"
-        f"{st.secrets['db_credentials']['DB_HOST']}/"
-        f"{st.secrets['db_credentials']['DB_NAME']}"
-    )
-except KeyError as e:
-    st.error("❌ Error leyendo secrets.toml — revisa las claves.")
-    st.stop()
 
 db = SQLDatabase(engine)
 
-# ========================================================
-# 🤖 2. CONFIGURACIÓN DEL MODELO GEMINI
-# ========================================================
+# ============================================================
+# 4. DEFINIR LA HERRAMIENTA SQL
+# ============================================================
+def run_query(sql: str):
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(sql))
+            rows = result.fetchall()
+            return str(rows)
+    except Exception as e:
+        return f"Error ejecutando SQL: {e}"
+
+sql_tool = Tool(
+    name="sql_executor",
+    description="Ejecuta SQL sobre MariaDB.",
+    func=run_query
+)
+
+# ============================================================
+# 5. MODELO GEMINI 1.5 PRO (EL ÚNICO CON TOOL-CALLING ESTABLE)
+# ============================================================
 llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
+    model="gemini-1.5-pro",
     temperature=0,
-    system_message=PROMPT
+    max_output_tokens=2048
 )
 
-# ========================================================
-# 🧠 3. AGENTE SQL FORZADO A GENERAR QUERIES
-# ========================================================
-agent = create_sql_agent(
+# Prompt estructurado
+prompt = ChatPromptTemplate.from_messages([
+    ("system", PROMPT),
+    MessagesPlaceholder("chat_history"),
+    ("human", "{input}"),
+    MessagesPlaceholder("agent_scratchpad"),
+])
+
+# Usamos el agente tipo “OpenAI Tools Agent”
+agent = create_openai_tools_agent(
     llm=llm,
-    db=db,
-    verbose=True,
-    top_k=5,
-    use_query_checker=True,
-    handle_parsing_errors=True
+    tools=[sql_tool],
+    prompt=prompt
 )
 
-# ========================================================
-# 📝 4. INPUT DEL USUARIO
-# ========================================================
+executor = AgentExecutor(
+    agent=agent,
+    tools=[sql_tool],
+    verbose=True
+)
+
+# ============================================================
+# 6. UI – PREGUNTA DEL USUARIO
+# ============================================================
 consulta = st.text_input("Haz tu pregunta:", "")
 
-if consulta.strip() != "":
+if consulta:
     st.write("⏳ Analizando…")
 
     try:
-        # Ejecutar agente
-        result = agent.invoke(consulta)
+        result = executor.invoke({"input": consulta})
         st.success("✔ Hecho")
 
-        # ========================================================
-        # 📌 EXTRAER LA QUERY GENERADA
-        # ========================================================
+        # -------------------------------------------
+        # EXTRAER SQL GENERADA
+        # -------------------------------------------
         st.subheader("📌 SQL Generada")
 
-        sql_query = None
+        sql_generada = None
         steps = result.get("intermediate_steps", [])
 
         for step in steps:
-            if isinstance(step, tuple):
-                action = step[0]
-                if hasattr(action, "tool_input"):
-                    sql_query = action.tool_input
+            action, output = step
+            if hasattr(action, "tool_input"):
+                sql_generada = action.tool_input
 
-        if sql_query:
-            st.code(sql_query, language="sql")
+        if sql_generada:
+            st.code(sql_generada, language="sql")
         else:
-            st.warning("⚠ No se pudo extraer la query generada (el modelo no produjo SQL).")
+            st.warning("⚠ No se pudo extraer la SQL (el modelo no la produjo).")
 
-        # ========================================================
-        # 📘 RESPUESTA FINAL
-        # ========================================================
+        # -------------------------------------------
+        # RESPUESTA FINAL
+        # -------------------------------------------
         st.subheader("📘 Respuesta")
-        st.write(result.get("output", "⚠ Sin respuesta."))
+        st.write(result["output"])
 
     except Exception as e:
-        st.error(f"❌ Error ejecutando el agente: {e}")
-
+        st.error(f"❌ Error ejecutando agente: {e}")
