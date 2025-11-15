@@ -3,15 +3,15 @@ from sqlalchemy import create_engine, text
 from langchain_community.utilities import SQLDatabase
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.tools import Tool
-from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain.agents import AgentExecutor, create_react_agent
 from langchain_core.prompts import ChatPromptTemplate
 
 # ============================================================
-# 1. PROMPT MAESTRO — LIMPIO (SIN chat_history, SIN scratchpad)
+# 1. PROMPT (SENCILLO + COMPATIBLE CON REACT AGENT)
 # ============================================================
 PROMPT = """
-Eres un Agente SQL profesional encargado de responder cualquier pregunta del usuario
-usando ÚNICAMENTE las siguientes tablas de MariaDB:
+Eres un agente profesional de SQL.
+Tu tarea es responder la pregunta del usuario utilizando ÚNICAMENTE estas tablas:
 
 - replica_VIEW_Fact_Ingresos
 - replica_VIEW_Fact_Costos
@@ -21,27 +21,23 @@ usando ÚNICAMENTE las siguientes tablas de MariaDB:
 - replica_VIEW_Dim_Usuario
 - replica_VIEW_Dim_Ubicacion
 
-REGLAS OBLIGATORIAS:
-1. Tu PRIMERA acción siempre debe ser generar una QUERY SQL válida.
-2. NO puedes responder sin antes generar SQL.
-3. Incluso si no existen datos, IGUAL debes generar SQL.
-4. No puedes inventar columnas ni tablas.
-5. Usa JOIN correctos entre FACT y DIM.
-6. Tu respuesta final debe traer:
-   - SQL_GENERADA
-   - INTERPRETACIÓN EN ESPAÑOL
-7. Prohibido decir "No sé" o "I don’t know".
+REGLAS:
+1. Tu primer paso SIEMPRE debe ser generar SQL.
+2. La SQL NO puede inventar columnas ni tablas.
+3. Usa JOIN correctos entre FACT y DIM.
+4. Si no hay datos, igual debes generar SQL.
+5. Después de ejecutar la SQL, interpreta los resultados en español.
 """
 
 # ============================================================
-# 2. UI DE STREAMLIT
+# 2. STREAMLIT CONFIG
 # ============================================================
 st.set_page_config(page_title="IANA SQL – Gemini 1.5 PRO", page_icon="🤖")
-st.title("🤖 IANA SQL Universal – Gemini 1.5 PRO (100% Real SQL)")
-st.caption("Consultas SQL reales usando Gemini en modo Tool-Calling estable.")
+st.title("🤖 IANA SQL Universal – Gemini 1.5 PRO (React Agent)")
+st.caption("Agente SQL totalmente compatible con Gemini 1.5 PRO")
 
 # ============================================================
-# 3. CONEXIÓN A MARIADB
+# 3. CONEXIÓN MARIADB
 # ============================================================
 engine = create_engine(
     f"mysql+pymysql://{st.secrets['db_credentials']['DB_USER']}:"
@@ -53,10 +49,9 @@ engine = create_engine(
 db = SQLDatabase(engine)
 
 # ============================================================
-# 4. DEFINIR LA HERRAMIENTA SQL
+# 4. HERRAMIENTA SQL
 # ============================================================
 def run_query(sql: str):
-    """Ejecuta una query SQL sobre MariaDB."""
     try:
         with engine.connect() as conn:
             result = conn.execute(text(sql))
@@ -67,39 +62,36 @@ def run_query(sql: str):
 
 sql_tool = Tool(
     name="sql_executor",
-    description="Ejecuta SQL sobre MariaDB.",
-    func=run_query
+    func=run_query,
+    description="Ejecuta SQL sobre MariaDB."
 )
 
 # ============================================================
-# 5. MODELO GEMINI 1.5 PRO (EL ÚNICO QUE FUNCIONA CON TOOLS)
+# 5. CONFIGURAR GEMINI 1.5 PRO
 # ============================================================
 llm = ChatGoogleGenerativeAI(
     model="gemini-1.5-pro",
-    temperature=0,
-    max_output_tokens=2048
+    temperature=0
 )
 
+# ============================================================
+# 6. AGENTE REACT COMPATIBLE CON GEMINI
+# ============================================================
 prompt = ChatPromptTemplate.from_messages([
     ("system", PROMPT),
     ("human", "{input}")
 ])
 
-# Agente compatible con tool-calling
-agent = create_openai_tools_agent(
+agent = create_react_agent(
     llm=llm,
     tools=[sql_tool],
     prompt=prompt
 )
 
-executor = AgentExecutor(
-    agent=agent,
-    tools=[sql_tool],
-    verbose=True
-)
+executor = AgentExecutor(agent=agent, tools=[sql_tool], verbose=True)
 
 # ============================================================
-# 6. INPUT DEL USUARIO
+# 7. UI
 # ============================================================
 consulta = st.text_input("Haz tu pregunta:", "")
 
@@ -110,12 +102,10 @@ if consulta:
         result = executor.invoke({"input": consulta})
         st.success("✔ Hecho")
 
-        # -------------------------------------------
         # EXTRAER SQL
-        # -------------------------------------------
         st.subheader("📌 SQL Generada")
-
         sql_generada = None
+
         for step in result.get("intermediate_steps", []):
             action, output = step
             if hasattr(action, "tool_input"):
@@ -124,13 +114,12 @@ if consulta:
         if sql_generada:
             st.code(sql_generada, language="sql")
         else:
-            st.warning("⚠ No se pudo extraer la SQL generada.")
+            st.warning("⚠ No se pudo extraer SQL.")
 
-        # -------------------------------------------
-        # RESPUESTA FINAL
-        # -------------------------------------------
+        # RESPUESTA
         st.subheader("📘 Respuesta")
-        st.write(result.get("output", "No hubo respuesta."))
+        st.write(result["output"])
 
     except Exception as e:
         st.error(f"❌ Error ejecutando agente: {e}")
+
