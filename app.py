@@ -1,14 +1,13 @@
 import streamlit as st
-import pandas as pd
 from sqlalchemy import create_engine, text
 from langchain_community.utilities import SQLDatabase
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.tools import Tool
 from langchain.agents import AgentExecutor, create_openai_tools_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate
 
 # ============================================================
-# 1. PROMPT MAESTRO — Compatible y probado con Gemini 1.5 PRO
+# 1. PROMPT MAESTRO — LIMPIO (SIN chat_history, SIN scratchpad)
 # ============================================================
 PROMPT = """
 Eres un Agente SQL profesional encargado de responder cualquier pregunta del usuario
@@ -23,7 +22,7 @@ usando ÚNICAMENTE las siguientes tablas de MariaDB:
 - replica_VIEW_Dim_Ubicacion
 
 REGLAS OBLIGATORIAS:
-1. Tu PRIMERA acción siempre debe ser una QUERY SQL válida.
+1. Tu PRIMERA acción siempre debe ser generar una QUERY SQL válida.
 2. NO puedes responder sin antes generar SQL.
 3. Incluso si no existen datos, IGUAL debes generar SQL.
 4. No puedes inventar columnas ni tablas.
@@ -35,7 +34,7 @@ REGLAS OBLIGATORIAS:
 """
 
 # ============================================================
-# 2. CONFIGURACIÓN DE STREAMLIT
+# 2. UI DE STREAMLIT
 # ============================================================
 st.set_page_config(page_title="IANA SQL – Gemini 1.5 PRO", page_icon="🤖")
 st.title("🤖 IANA SQL Universal – Gemini 1.5 PRO (100% Real SQL)")
@@ -57,6 +56,7 @@ db = SQLDatabase(engine)
 # 4. DEFINIR LA HERRAMIENTA SQL
 # ============================================================
 def run_query(sql: str):
+    """Ejecuta una query SQL sobre MariaDB."""
     try:
         with engine.connect() as conn:
             result = conn.execute(text(sql))
@@ -72,7 +72,7 @@ sql_tool = Tool(
 )
 
 # ============================================================
-# 5. MODELO GEMINI 1.5 PRO (EL ÚNICO CON TOOL-CALLING ESTABLE)
+# 5. MODELO GEMINI 1.5 PRO (EL ÚNICO QUE FUNCIONA CON TOOLS)
 # ============================================================
 llm = ChatGoogleGenerativeAI(
     model="gemini-1.5-pro",
@@ -80,15 +80,12 @@ llm = ChatGoogleGenerativeAI(
     max_output_tokens=2048
 )
 
-# Prompt estructurado
 prompt = ChatPromptTemplate.from_messages([
     ("system", PROMPT),
-    MessagesPlaceholder("chat_history"),
-    ("human", "{input}"),
-    MessagesPlaceholder("agent_scratchpad"),
+    ("human", "{input}")
 ])
 
-# Usamos el agente tipo “OpenAI Tools Agent”
+# Agente compatible con tool-calling
 agent = create_openai_tools_agent(
     llm=llm,
     tools=[sql_tool],
@@ -102,26 +99,24 @@ executor = AgentExecutor(
 )
 
 # ============================================================
-# 6. UI – PREGUNTA DEL USUARIO
+# 6. INPUT DEL USUARIO
 # ============================================================
 consulta = st.text_input("Haz tu pregunta:", "")
 
 if consulta:
-    st.write("⏳ Analizando…")
+    st.write("⏳ Analizando...")
 
     try:
         result = executor.invoke({"input": consulta})
         st.success("✔ Hecho")
 
         # -------------------------------------------
-        # EXTRAER SQL GENERADA
+        # EXTRAER SQL
         # -------------------------------------------
         st.subheader("📌 SQL Generada")
 
         sql_generada = None
-        steps = result.get("intermediate_steps", [])
-
-        for step in steps:
+        for step in result.get("intermediate_steps", []):
             action, output = step
             if hasattr(action, "tool_input"):
                 sql_generada = action.tool_input
@@ -129,13 +124,13 @@ if consulta:
         if sql_generada:
             st.code(sql_generada, language="sql")
         else:
-            st.warning("⚠ No se pudo extraer la SQL (el modelo no la produjo).")
+            st.warning("⚠ No se pudo extraer la SQL generada.")
 
         # -------------------------------------------
         # RESPUESTA FINAL
         # -------------------------------------------
         st.subheader("📘 Respuesta")
-        st.write(result["output"])
+        st.write(result.get("output", "No hubo respuesta."))
 
     except Exception as e:
         st.error(f"❌ Error ejecutando agente: {e}")
