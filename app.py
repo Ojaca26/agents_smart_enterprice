@@ -3,11 +3,11 @@ from sqlalchemy import create_engine, text
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 # ============================================================
-# CONFIG
+# CONFIG STREAMLIT
 # ============================================================
-st.set_page_config(page_title="IANA SQL – Gemini", page_icon="🤖")
-st.title("🤖 IANA SQL Universal – Gemini (100% Estable + SQL Real)")
-st.caption("Agente SQL estable usando Gemini 1.5/2.5 sin errores de herramientas.")
+st.set_page_config(page_title="IANA SQL – GEMINI", page_icon="🤖")
+st.title("🤖 IANA SQL Universal – Gemini (Estable, Real y Preciso)")
+st.caption("Agente SQL profesional con generación de SQL real + ejecución en MariaDB.")
 
 # ============================================================
 # CONEXIÓN A MARIADB
@@ -20,20 +20,74 @@ engine = create_engine(
 )
 
 # ============================================================
-# MODELO GEMINI
+# MODELO GEMINI (ESTABLE PARA PRODUCCIÓN)
 # ============================================================
 llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",   # o gemini-2.5-pro cuando esté estable
+    model="gemini-1.5-flash",  # Estable y disponible para todas las claves
     temperature=0
 )
 
 # ============================================================
-# PROMPT PARA GENERAR SQL
+# TABLAS PERMITIDAS
+# ============================================================
+TABLAS = [
+    "replica_VIEW_Fact_Ingresos",
+    "replica_VIEW_Fact_Costos",
+    "replica_VIEW_Fact_Solicitudes",
+    "replica_VIEW_Dim_Empresa",
+    "replica_VIEW_Dim_Concepto",
+    "replica_VIEW_Dim_Usuario",
+    "replica_VIEW_Dim_Ubicacion"
+]
+
+# ============================================================
+# FUNCIÓN: obtener columnas reales desde MariaDB
+# ============================================================
+def obtener_columnas(nombre_tabla):
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(f"SHOW COLUMNS FROM {nombre_tabla};"))
+            return [row[0] for row in result.fetchall()]
+    except Exception as e:
+        return [f"Error leyendo columnas: {e}"]
+
+def obtener_esquema():
+    esquema = "ESQUEMA REAL DE LA BASE DE DATOS:\n"
+    for tabla in TABLAS:
+        columnas = obtener_columnas(tabla)
+        esquema += f"\nTabla {tabla}:\n"
+        for col in columnas:
+            esquema += f"  - {col}\n"
+    return esquema
+
+# ============================================================
+# FUNCIÓN: limpiar SQL generada por Gemini
+# ============================================================
+def limpiar_sql(raw_sql: str):
+    sql = raw_sql
+
+    sql = sql.replace("```sql", "")
+    sql = sql.replace("```", "")
+    sql = sql.replace("SQL:", "")
+    sql = sql.replace("sql", "")
+    sql = sql.replace("Sql", "")
+    sql = sql.replace("SQL", "")
+
+    sql = sql.strip()
+
+    # Cortar todo lo que aparezca antes de SELECT
+    idx = sql.upper().find("SELECT")
+    if idx != -1:
+        sql = sql[idx:]
+
+    return sql.strip()
+
+# ============================================================
+# PROMPTS
 # ============================================================
 PROMPT_SQL = """
 Eres un generador experto de SQL.
-Tu tarea es CONVERTIR la consulta del usuario en una QUERY SQL válida
-usando ÚNICAMENTE estas tablas:
+Convierte la consulta del usuario en una QUERY SQL válida usando SOLO estas tablas:
 
 - replica_VIEW_Fact_Ingresos
 - replica_VIEW_Fact_Costos
@@ -44,68 +98,66 @@ usando ÚNICAMENTE estas tablas:
 - replica_VIEW_Dim_Ubicacion
 
 REGLAS:
-1. Genera SOLO SQL, nada de texto adicional.
-2. No expliques, no hables, no escribas nada más.
-3. No inventes columnas ni tablas.
-4. Usa JOIN correctos entre FACT y DIM.
+1. Genera SOLO SQL (sin explicaciones, sin texto adicional).
+2. NO inventes columnas.
+3. NO inventes tablas.
+4. Usa únicamente las columnas mostradas en el ESQUEMA REAL.
+5. Usa JOIN correctos.
 """
 
-
-# ============================================================
-# PROMPT PARA ANÁLISIS DE RESULTADO
-# ============================================================
 PROMPT_ANALISIS = """
-Eres un analista de datos experto.
-Explica el resultado de la consulta SQL de forma clara, resumida y profesional,
-en español, sin inventar datos.
+Eres un analista profesional.
+Explica el resultado SQL en español, de forma clara, útil y concisa.
+No inventes datos.
 """
 
-
 # ============================================================
-# UI: INPUT DEL USUARIO
+# UI INPUT
 # ============================================================
-consulta = st.text_input("Haz tu pregunta:", "")
+consulta = st.text_input("Haz tu pregunta de negocio:", "")
 
 if consulta:
 
-    # ---------------------------------------------
-    # 1️⃣ GENERAR SQL usando Gemini
-    # ---------------------------------------------
-    st.write("⏳ Generando SQL…")
+    # 1️⃣ Obtener esquema real
+    esquema = obtener_esquema()
 
-    resp_sql = llm.invoke(
-        PROMPT_SQL + "\nConsulta del usuario: " + consulta
+    # 2️⃣ Generar SQL
+    st.write("⏳ Generando SQL…")
+    prompt_completo = (
+        PROMPT_SQL
+        + "\n\n" + esquema
+        + "\n\nConsulta del usuario: "
+        + consulta
     )
 
-    sql_query = resp_sql.content.strip()
+    respuesta_sql = llm.invoke(prompt_completo)
+    sql_generada_cruda = respuesta_sql.content.strip()
+
+    # 3️⃣ Limpiar SQL
+    sql_final = limpiar_sql(sql_generada_cruda)
 
     st.subheader("📌 SQL Generada")
-    st.code(sql_query, language="sql")
+    st.code(sql_final, language="sql")
 
-    # ---------------------------------------------
-    # 2️⃣ EJECUTAR SQL SOBRE MARIADB
-    # ---------------------------------------------
+    # 4️⃣ Ejecutar SQL
     st.write("⏳ Ejecutando SQL…")
-
     try:
         with engine.connect() as conn:
-            result = conn.execute(text(sql_query))
-            rows = [dict(r) for r in result.fetchall()]
+            result = conn.execute(text(sql_final))
+            filas = [dict(r) for r in result.fetchall()]
     except Exception as e:
-        rows = []
         st.error(f"❌ Error ejecutando SQL: {e}")
+        filas = []
 
     st.subheader("📊 Resultado SQL")
-    st.write(rows)
+    st.write(filas)
 
-    # ---------------------------------------------
-    # 3️⃣ ANÁLISIS DEL RESULTADO
-    # ---------------------------------------------
-    st.write("⏳ Analizando…")
+    # 5️⃣ Interpretación
+    st.write("⏳ Analizando resultado…")
 
-    resp_analisis = llm.invoke(
-        PROMPT_ANALISIS + "\nResultado:\n" + str(rows)
+    analisis = llm.invoke(
+        PROMPT_ANALISIS + "\n\nRESULTADO:\n" + str(filas)
     )
 
-    st.subheader("📘 Interpretación")
-    st.write(resp_analisis.content)
+    st.subheader("📘 Interpretación del Resultado")
+    st.write(analisis.content)
