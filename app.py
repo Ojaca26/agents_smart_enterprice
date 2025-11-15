@@ -35,7 +35,10 @@ st.title("🤖 IANA – Agente SQL Universal (Todas las tablas)")
 # 1. Conexión
 # -------------------------------------------------------
 engine = create_engine(
-    f"mysql+pymysql://{st.secrets['DB_USER']}:{st.secrets['DB_PASS']}@{st.secrets['DB_HOST']}/{st.secrets['DB_NAME']}"
+    f"mysql+pymysql://{st.secrets['db_credentials']['DB_USER']}:"
+    f"{st.secrets['db_credentials']['DB_PASS']}@"
+    f"{st.secrets['db_credentials']['DB_HOST']}/"
+    f"{st.secrets['db_credentials']['DB_NAME']}"
 )
 
 db = SQLDatabase(engine)
