@@ -23,7 +23,7 @@ engine = create_engine(
 # MODELO GEMINI
 # ============================================================
 llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-pro",   # o gemini-2.5-pro cuando esté estable
+    model="gemini-2.5-flash",   # o gemini-2.5-pro cuando esté estable
     temperature=0
 )
 
