@@ -1,6 +1,0 @@
-datacenter/
-├── agents.py
-├── app.py
-├── graph_builder.py
-├── requirements.txt
-└── schema.txt      (solo informativo)
