@@ -14,7 +14,7 @@ ALLOWED_TABLES: List[str] = [
     "replica_VIEW_Dim_Ubicacion",
     "replica_VIEW_Fact_Costos",
     "replica_VIEW_Fact_Ingresos",
-    "replica_VIEW_Fact_Solicitudes",
+    "replica_VIEW_Fact_Solicitudes"
 ]
 
 
