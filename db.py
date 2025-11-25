@@ -8,15 +8,9 @@ from langchain_community.utilities import SQLDatabase
 import pathlib
 
 # Vistas que el agente puede usar
-ALLOWED_TABLES: List[str] = [
-    "replica_VIEW_Dim_Concepto",
-    "replica_VIEW_Dim_Empresa",
-    "replica_VIEW_Dim_Ubicacion",
-    "replica_VIEW_Fact_Costos",
-    "replica_VIEW_Fact_Ingresos",
-    "replica_VIEW_Fact_Solicitudes"
+ALLOWED_TABLES = [
+    "data_clientes",
 ]
-
 
 @st.cache_resource(show_spinner=False)
 def get_engine():
