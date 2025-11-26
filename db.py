@@ -26,8 +26,16 @@ def get_engine():
         f"@{creds['DB_HOST']}/{creds['DB_NAME']}"
     )
     engine = create_engine(uri)
-    return engine
 
+    # 🔍 DEBUG: Mostrar a qué base realmente se conecta Streamlit
+    try:
+        with engine.connect() as conn:
+            result = conn.execute("SELECT DATABASE();").fetchone()
+            st.write("🟡 Base usada por Streamlit:", result[0])
+    except Exception as e:
+        st.write("❌ Error verificando base:", str(e))
+
+    return engine
 
 @st.cache_resource(show_spinner=False)
 def get_sql_database() -> SQLDatabase:
