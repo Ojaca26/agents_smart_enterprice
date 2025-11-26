@@ -25,6 +25,8 @@ def get_engine():
         f"mysql+pymysql://{creds['DB_USER']}:{creds['DB_PASS']}"
         f"@{creds['DB_HOST']}/{creds['DB_NAME']}"
     )
+    st.write("🔧 URI generada:", uri)
+
     engine = create_engine(uri)
 
     # 🔍 DEBUG: Mostrar a qué base realmente se conecta Streamlit
