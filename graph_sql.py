@@ -11,9 +11,15 @@ from db import get_sql_database, load_schema_text, ALLOWED_TABLES
 
 import json
 import textwrap
+import decimal
+
+
+# ==========================
+# UTILS
+# ==========================
 
 def clean_sql(query: str) -> str:
-    """Limpia SQL quitando formato Markdown, backticks y espacios basura."""
+    """Limpia SQL quitando formato Markdown, backticks y basura."""
     if not query:
         return ""
     q = query.replace("```sql", "")
@@ -21,10 +27,9 @@ def clean_sql(query: str) -> str:
     q = q.replace("`", "")
     return q.strip()
 
-def safe_rows(rows):
-    """Convierte los valores a tipos seguros para Streamlit/Pandas."""
-    import decimal
 
+def safe_rows(rows):
+    """Convierte DECIMAL y None a tipos seguros para Streamlit."""
     safe_list = []
     for row in rows:
         safe_row = {}
@@ -36,7 +41,6 @@ def safe_rows(rows):
             else:
                 safe_row[k] = v
         safe_list.append(safe_row)
-
     return safe_list
 
 
@@ -66,7 +70,7 @@ class GraphState(TypedDict):
 
 
 # ==========================
-# 3. Nodos (agentes)
+# 3. Nodos
 # ==========================
 
 def router_node(state: GraphState) -> GraphState:
@@ -74,18 +78,13 @@ def router_node(state: GraphState) -> GraphState:
     question = state["question"]
 
     system_prompt = """
-    Eres un clasificador de intención para un asistente de analítica de negocios
-    que trabaja con datos de una empresa de servicios/logística.
-
-    Debes clasificar cada pregunta del usuario en EXACTAMENTE una de estas categorías:
-    - ingresos      → preguntas sobre ventas, facturación, recaudo, ingresos
-    - costos        → preguntas sobre costos, gastos, margen, rentabilidad
-    - solicitudes   → preguntas sobre tiempos de atención, solicitudes, servicios, tickets
-    - mixto         → si mezcla claramente varios de los anteriores
-    - chitchat      → saludo, explicación general, cosas sin número específico
-
-    Responde SOLO un JSON con la forma:
-    {"route": "ingresos"}  # o costos, solicitudes, mixto, chitchat
+    Eres un clasificador de intención para un asistente de analítica de negocios.
+    Categorías:
+    - ingresos
+    - costos
+    - solicitudes
+    - mixto
+    - chitchat
     """
 
     messages = [
@@ -100,98 +99,90 @@ def router_node(state: GraphState) -> GraphState:
         value = data.get("route", "chitchat")
         if value in ["ingresos", "costos", "solicitudes", "mixto", "chitchat"]:
             route = value
-    except Exception:
+    except:
         q = question.lower()
         if any(w in q for w in ["ingreso", "venta", "facturaci", "recaudo"]):
             route = "ingresos"
         elif any(w in q for w in ["costo", "gasto", "rentab"]):
             route = "costos"
-        elif any(w in q for w in ["solicitud", "ticket", "servicio", "tiempo de espera"]):
+        elif any(w in q for w in ["solicitud", "ticket", "servicio"]):
             route = "solicitudes"
         else:
             route = "chitchat"
 
-    state["route"] = route  # type: ignore
+    state["route"] = route
     return state
 
 
 def sql_agent_node(state: GraphState) -> GraphState:
-    """Genera SQL sobre las vistas permitidas, sin ejecutarlo."""
+    """Genera SQL sobre las tablas permitidas."""
     question = state["question"]
     route = state["route"]
 
     system_prompt = f"""
-    Eres un generador de SQL experto para MariaDB.
+    Eres un generador de SQL experto en MariaDB.
 
-    SOLO puedes usar las siguientes vistas:
+    SOLO puedes usar estas tablas:
     {', '.join(ALLOWED_TABLES)}
 
-    A continuación tienes una descripción de las vistas y sus columnas:
-
+    Schema disponible:
     {schema_text}
 
-    Reglas IMPORTANTES:
-    - NO inventes tablas ni vistas.
-    - NO inventes columnas.
-    - Usa nombres exactamente como están en el schema.
-    - Usa joins lógicos entre ID_Empresa, ID_Concepto, ID_Ubicacion, ID_Fecha, etc.
-    - Debes devolver ÚNICAMENTE un bloque de SQL válido.
-    - No agregues texto explicativo antes ni después del SQL.
-    - No uses LIMIT a menos que el usuario lo pida.
-
-    La categoría de la pregunta es: {route}.
+    Reglas:
+    - Devuelve SOLO el SQL limpio.
+    - No uses ```sql ni ``` ni backticks.
+    - No inventes tablas ni columnas.
+    - Usa joins correctos.
     """
 
     messages = [
         SystemMessage(content=textwrap.dedent(system_prompt)),
-        HumanMessage(content=question),
+        HumanMessage(content=question)
     ]
-    sql = llm.invoke(messages).content.strip()
+    sql_raw = llm.invoke(messages).content
+    sql_clean = clean_sql(sql_raw)
 
-    state["sql_query"] = sql
+    state["sql_query"] = sql_clean
     return state
 
 
 def sql_validator_node(state: GraphState) -> GraphState:
-    """Valida sintaxis básica y que las tablas usadas estén permitidas."""
-    sql = state["sql_query"]
-    upper = sql.upper()
-
+    sql = state["sql_query"].upper()
     error = ""
 
-    if "SELECT" not in upper or "FROM" not in upper:
-        error = "El SQL generado no parece una sentencia SELECT válida."
+    if "SELECT" not in sql or "FROM" not in sql:
+        error = "El SQL generado no parece un SELECT válido."
 
-    # Validar que solo use tablas conocidas (muy simple pero útil)
-    allowed_upper = [t.upper() for t in ALLOWED_TABLES]
-    tokens = upper.replace("\n", " ").split()
-    for i, token in enumerate(tokens):
-        if token in ("FROM", "JOIN"):
-            if i + 1 < len(tokens):
-                candidate = tokens[i + 1].strip(" ,`")
-                # Manejar alias tipo nombre_tabla AS X
-                if candidate.upper() not in allowed_upper:
-                    error = f"Se encontró una tabla no permitida o mal escrita: '{candidate}'."
-                    break
+    allowed = [t.upper() for t in ALLOWED_TABLES]
+    tokens = sql.replace("\n", " ").split()
+
+    for i, t in enumerate(tokens):
+        if t in ("FROM", "JOIN") and i + 1 < len(tokens):
+            candidate = tokens[i + 1].strip(" ,")
+            if candidate.upper() not in allowed:
+                error = f"Tabla no permitida o mal escrita: {candidate}"
+                break
 
     state["error"] = error
     return state
 
 
 def sql_executor_node(state: GraphState) -> GraphState:
-    """Ejecuta el SQL en la base de datos."""
+    """Ejecuta SQL seguro."""
     sql = state["sql_query"]
 
     if not sql.strip():
-        state["error"] = "No hay SQL para ejecutar."
-        state["result"] = []
+        state["error"] = "SQL vacío."
         return state
 
     try:
         cleaned_sql = clean_sql(sql)
-        state["sql_query"] = cleaned_sql
-        
         result = sql_db.run(cleaned_sql)
+
+        # convertir DECIMAL → float
+        if isinstance(result, list):
+            result = safe_rows(result)
+
         state["result"] = result
         state["error"] = ""
     except Exception as e:
@@ -202,76 +193,58 @@ def sql_executor_node(state: GraphState) -> GraphState:
 
 
 def analyst_agent_node(state: GraphState) -> GraphState:
-    """Toma la pregunta y el resultado y genera una respuesta entendible para negocio."""
     question = state["question"]
-    result = state.get("result", [])
-    error = state.get("error", "")
+    result = state["result"]
+    error = state["error"]
 
     if error:
-        system_prompt = """
-        Eres un analista de datos que explica errores de forma clara
-        a un usuario de negocio. Responde en pocas frases, en español.
-        """
+        system_prompt = "Explica el error de forma simple."
         messages = [
-            SystemMessage(content=textwrap.dedent(system_prompt)),
-            HumanMessage(content=f"Hubo este error al procesar la consulta: {error}"),
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=error),
         ]
-        explanation = llm.invoke(messages).content
-        state["result"] = {
-            "type": "ok",
-            "answer": answer,
-            "rows": safe_rows(preview)  # 🔥 Conversión segura para Streamlit
-        }
-
+        exp = llm.invoke(messages).content
+        state["result"] = {"type": "error", "message": exp}
         return state
 
-    # preview para no explotar tokens
-    preview = result
-    if isinstance(result, list) and len(result) > 20:
-        preview = result[:20]
-
     system_prompt = """
-    Eres un analista de inteligencia de negocios.
-    Explica el resultado de una consulta SQL en términos de KPIs,
-    totales, promedios o tendencias. Responde en español, breve y claro.
-    No inventes datos que no estén en el resultado.
+    Eres un analista de BI.
+    Resume resultados SQL de forma clara.
+    No inventes datos.
     """
+
     messages = [
-        SystemMessage(content=textwrap.dedent(system_prompt)),
+        SystemMessage(content=system_prompt),
         HumanMessage(
-            content=(
-                f"Pregunta del usuario: {question}\n\n"
-                f"Resultado (primeras filas en JSON): {json.dumps(preview, default=str)}"
-            )
+            content=f"Pregunta: {question}\nResultado JSON: {json.dumps(result, default=str)}"
         ),
     ]
     answer = llm.invoke(messages).content
-    state["result"] = {"type": "ok", "answer": answer, "rows": preview}
+
+    state["result"] = {"type": "ok", "answer": answer, "rows": result}
     return state
 
 
 def chitchat_agent_node(state: GraphState) -> GraphState:
-    """Responde preguntas generales que no requieren SQL."""
     question = state["question"]
+
     system_prompt = """
-    Eres un asistente conversacional de DataInsights, especializado en explicar
-    temas de analítica, inteligencia de negocios y uso de IA para empresas.
-    Responde en español, tono profesional pero cercano.
-    Si crees que el usuario podría beneficiarse de una consulta a la base de datos,
-    sugiere cómo formular una pregunta de negocio (ej: ingresos por año, costos por zona, etc.).
+    Eres un asistente conversacional experto en analítica y BI.
+    Responde en español.
     """
+
     messages = [
-        SystemMessage(content=textwrap.dedent(system_prompt)),
+        SystemMessage(content=system_prompt),
         HumanMessage(content=question),
     ]
-    answer = llm.invoke(messages).content
-    state["result"] = {"type": "chat", "answer": answer}
-    state["error"] = ""
+    ans = llm.invoke(messages).content
+
+    state["result"] = {"type": "chat", "answer": ans}
     return state
 
 
 # ==========================
-# 4. Construcción del grafo
+# 4. Construcción del Grafo
 # ==========================
 
 builder = StateGraph(GraphState)
@@ -287,9 +260,7 @@ builder.set_entry_point("router")
 
 
 def _route_from_router(state: GraphState) -> str:
-    if state["route"] == "chitchat":
-        return "to_chitchat"
-    return "to_sql"
+    return "to_chitchat" if state["route"] == "chitchat" else "to_sql"
 
 
 builder.add_conditional_edges(
@@ -305,9 +276,7 @@ builder.add_edge("sql_agent", "sql_validator")
 
 
 def _check_validation(state: GraphState) -> str:
-    if state.get("error"):
-        return "to_analyst"
-    return "to_exec"
+    return "to_analyst" if state["error"] else "to_exec"
 
 
 builder.add_conditional_edges(
@@ -327,13 +296,11 @@ graph_app = builder.compile()
 
 
 def run_graph(question: str) -> Dict[str, Any]:
-    """Función de alto nivel para usar desde Streamlit u otros módulos."""
     initial: GraphState = {
         "question": question,
-        "route": "chitchat",  # valor inicial dummy, el router lo ajusta
+        "route": "chitchat",
         "sql_query": "",
         "result": [],
         "error": "",
     }
-    final_state = graph_app.invoke(initial)
-    return final_state
+    return graph_app.invoke(initial)
