@@ -10,12 +10,13 @@ st.markdown(
     """
 Este asistente responde preguntas de negocio usando las vistas:
 
-- `replica_VIEW_Fact_Ingresos`
-- `replica_VIEW_Fact_Costos`
-- `replica_VIEW_Fact_Solicitudes`
-- `replica_VIEW_Dim_Empresa`
-- `replica_VIEW_Dim_Concepto`
-- `replica_VIEW_Dim_Ubicacion`
+- `tbl_Dim_Concepto`
+- `tbl_Dim_Empresa`
+- `tbl_Dim_Ubicacion`
+- `tbl_Fact_Costos`
+- `tbl_Fact_Ingresos`
+- `tbl_Fact_Solicitudes`
+
 
 Formula preguntas del tipo:
 
