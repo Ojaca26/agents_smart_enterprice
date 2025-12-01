@@ -12,6 +12,14 @@ from db import get_sql_database, load_schema_text, ALLOWED_TABLES
 import json
 import textwrap
 
+def clean_sql(query: str) -> str:
+    """Limpia SQL quitando formato Markdown, backticks y espacios basura."""
+    if not query:
+        return ""
+    q = query.replace("```sql", "")
+    q = q.replace("```", "")
+    q = q.replace("`", "")
+    return q.strip()
 
 # ==========================
 # 1. LLM y BD compartidos
@@ -161,7 +169,10 @@ def sql_executor_node(state: GraphState) -> GraphState:
         return state
 
     try:
-        result = sql_db.run(sql)  # devuelve normalmente una lista de dicts
+        cleaned_sql = clean_sql(sql)
+        state["sql_query"] = cleaned_sql
+        
+        result = sql_db.run(cleaned_sql)
         state["result"] = result
         state["error"] = ""
     except Exception as e:
