@@ -9,7 +9,12 @@ import pathlib
 
 # Vistas que el agente puede usar
 ALLOWED_TABLES = [
-    "tbl_Fact_Ingresos"
+    "tbl_Dim_Concepto",
+    "tbl_Dim_Empresa",
+    "tbl_Dim_Ubicacion",
+    "tbl_Fact_Costos",
+    "tbl_Fact_Ingresos",
+    "tbl_Fact_Solicitudes",
 ]
 
 @st.cache_resource(show_spinner=False)
