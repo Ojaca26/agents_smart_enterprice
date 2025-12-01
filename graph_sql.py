@@ -21,6 +21,25 @@ def clean_sql(query: str) -> str:
     q = q.replace("`", "")
     return q.strip()
 
+def safe_rows(rows):
+    """Convierte los valores a tipos seguros para Streamlit/Pandas."""
+    import decimal
+
+    safe_list = []
+    for row in rows:
+        safe_row = {}
+        for k, v in row.items():
+            if isinstance(v, decimal.Decimal):
+                safe_row[k] = float(v)
+            elif v is None:
+                safe_row[k] = ""
+            else:
+                safe_row[k] = v
+        safe_list.append(safe_row)
+
+    return safe_list
+
+
 # ==========================
 # 1. LLM y BD compartidos
 # ==========================
@@ -198,7 +217,12 @@ def analyst_agent_node(state: GraphState) -> GraphState:
             HumanMessage(content=f"Hubo este error al procesar la consulta: {error}"),
         ]
         explanation = llm.invoke(messages).content
-        state["result"] = {"type": "error", "message": explanation}
+        state["result"] = {
+            "type": "ok",
+            "answer": answer,
+            "rows": safe_rows(preview)  # 🔥 Conversión segura para Streamlit
+        }
+
         return state
 
     # preview para no explotar tokens
