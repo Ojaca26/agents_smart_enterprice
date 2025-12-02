@@ -128,11 +128,22 @@ def sql_agent_node(state: GraphState) -> GraphState:
     Schema disponible:
     {schema_text}
 
+    Relaciones Lógicas (Foreign Keys):
+    - tbl_fact_costos.ID_Empresa = tbl_dim_empresa.ID_Empresa
+    - tbl_fact_ingresos.ID_Empresa = tbl_dim_empresa.ID_Empresa
+    - tbl_fact_solicitudes.ID_Empresa = tbl_dim_empresa.ID_Empresa
+    - tbl_fact_costos.ID_Concepto = tbl_dim_concepto.ID_CONCEPTO
+    - tbl_fact_ingresos.ID_Concepto = tbl_dim_concepto.ID_CONCEPTO
+    - tbl_fact_costos.ID_Ubicacion = tbl_dim_ubicacion.ID_Ubicacion
+    - tbl_fact_solicitudes.ID_Ubicacion = tbl_dim_ubicacion.ID_Ubicacion
+    - Las IDs de Fecha (ID_Fecha) deben ser tratadas como enteros y puedes unirlas a una tabla de calendario (no visible) o usar funciones de fecha para filtrar si es necesario (ej: YEAR(Columna_Fecha) = 2024).
+
     Reglas:
     - Devuelve SOLO el SQL limpio.
     - No uses ```sql ni ``` ni backticks.
     - No inventes tablas ni columnas.
-    - Usa joins correctos.
+    - **Usa joins correctos y solo si es necesario.**
+    - **Siempre que sea posible, usa las columnas precalculadas** (ej: Total_Facturado, Margen_Bruto_Valor) de las tablas de dimensión para consultas simples.
     """
 
     messages = [
