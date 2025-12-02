@@ -29,17 +29,34 @@ def clean_sql(query: str) -> str:
 
 
 def safe_rows(rows):
-    """Convierte DECIMAL y None a tipos seguros para Streamlit."""
+    """
+    Convierte tipos de datos complejos (Decimal, Date/Time objects, etc.) 
+    a tipos seguros (float/str) para Streamlit, evitando StreamlitAPIException.
+    """
     safe_list = []
+    
+    # Asegurarse de que 'rows' es iterable
+    if not isinstance(rows, list):
+        rows = [rows]
+
     for row in rows:
         safe_row = {}
         for k, v in row.items():
             if isinstance(v, decimal.Decimal):
+                # Decimal a Float (maneja Valores Monetarios)
                 safe_row[k] = float(v)
             elif v is None:
+                # None a string vacío
                 safe_row[k] = ""
-            else:
+            elif isinstance(v, (int, float, str)):
+                # Tipos primitivos seguros (int, float, str), los mantenemos
                 safe_row[k] = v
+            else:
+                # Si es un objeto complejo del driver (Date, Time, BigInt, etc.), lo forzamos a cadena.
+                try:
+                    safe_row[k] = str(v)
+                except Exception:
+                    safe_row[k] = f"Error de Tipo: {type(v).__name__}"
         safe_list.append(safe_row)
     return safe_list
 
@@ -91,6 +108,7 @@ def router_node(state: GraphState) -> GraphState:
         SystemMessage(content=textwrap.dedent(system_prompt)),
         HumanMessage(content=question),
     ]
+    # Se usa la lógica de fallback que ya tenías
     raw = llm.invoke(messages).content
 
     route: str = "chitchat"
@@ -136,21 +154,21 @@ def sql_agent_node(state: GraphState) -> GraphState:
     - tbl_fact_ingresos.ID_Concepto = tbl_dim_concepto.ID_CONCEPTO
     - tbl_fact_costos.ID_Ubicacion = tbl_dim_ubicacion.ID_Ubicacion
     - tbl_fact_solicitudes.ID_Ubicacion = tbl_dim_ubicacion.ID_Ubicacion
-
-    Regla de Fechas (ID_Fecha):
+    
+    #########################################
+    # REGLAS CRUCIALES PARA FILTROS DE TIEMPO Y NOMBRES #
+    #########################################
     - La columna **ID_Fecha** en las tablas de hecho es un número entero con formato **AAAAMMDD**.
     - Para calcular el año (AAAA) a partir de ID_Fecha, **DEBES** usar la función CAST para asegurar que el resultado sea un entero: 
-      **SELECT CAST(ID_Fecha / 10000 AS SIGNED) AS Año ...**
+      **SELECT CAST(ID_Fecha / 10000 AS SIGNED) AS Anio ...**
     - Para filtrar por año o mes, DEBES usar rangos de números enteros (BETWEEN). Ejemplo para Enero de 2024: `WHERE ID_Fecha BETWEEN 20240101 AND 20240131`.
-     
-    Regla de Nomenclatura de Columnas:
-    - **Para la columna 'Año', usa el alias estricto 'Anio' (sin la 'ñ') en el SQL.**
-    
+    - Para la columna 'Año', usa el alias estricto 'Anio' (sin la 'ñ') en el SQL.
+
     Reglas de Generación SQL:
     1. Devuelve **SOLO el SQL limpio**, sin ```sql ni ``` ni backticks.
     2. No inventes tablas ni columnas.
-    3. Siempre que sea posible, usa las **columnas precalculadas** (ej: Total_Facturado, Margen_Bruto_Valor) de las tablas de dimensión para consultas simples y totales.
-    4. Usa joins solo cuando sea estrictamente necesario para conectar una tabla de Hechos con una de Dimensión.
+    3. Usa joins correctos y solo si es necesario.
+    4. Siempre que sea posible, usa las **columnas precalculadas** (ej: Total_Facturado, Margen_Bruto_Valor) de las tablas de dimensión para consultas simples y totales.
     """
 
     messages = [
@@ -165,6 +183,7 @@ def sql_agent_node(state: GraphState) -> GraphState:
 
 
 def sql_validator_node(state: GraphState) -> GraphState:
+    """Valida el SQL generado por seguridad y coherencia."""
     sql = state["sql_query"].upper()
     error = ""
 
@@ -181,7 +200,7 @@ def sql_validator_node(state: GraphState) -> GraphState:
                 error = f"Tabla no permitida o mal escrita: {candidate}"
                 break
 
-    # Nuevo: Validación de JOINS entre hechos (si no es ruta 'mixto')
+    # Validación de JOINS entre hechos (si no es ruta 'mixto')
     if state["route"] != "mixto":
         fact_tables = ["FACT_COSTOS", "FACT_INGRESOS", "FACT_SOLICITUDES"]
         found_facts = [t for t in fact_tables if t in sql]
@@ -208,9 +227,10 @@ def sql_executor_node(state: GraphState) -> GraphState:
 
     try:
         cleaned_sql = clean_sql(sql)
+        # LangChain's SQLDatabase.run() devuelve una lista de dicts
         result = sql_db.run(cleaned_sql)
 
-        # convertir DECIMAL → float
+        # Aplicar limpieza de tipos para evitar errores de Streamlit/Pandas
         if isinstance(result, list):
             result = safe_rows(result)
 
@@ -224,12 +244,13 @@ def sql_executor_node(state: GraphState) -> GraphState:
 
 
 def analyst_agent_node(state: GraphState) -> GraphState:
+    """Transforma el resultado SQL en una respuesta de negocio en Markdown."""
     question = state["question"]
     result = state["result"]
     error = state["error"]
 
     if error:
-        system_prompt = "Explica el error de forma simple."
+        system_prompt = "Eres un asistente técnico. Explica el error de forma simple, pidiendo al usuario que reformule la pregunta o revise el esquema. Nunca muestres el SQL generado."
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=error),
@@ -242,14 +263,14 @@ def analyst_agent_node(state: GraphState) -> GraphState:
     Eres un analista de BI. Tu objetivo es transformar los datos JSON resultantes de una consulta SQL en una respuesta de negocio clara, concisa y veraz.
 
     Reglas de Formato:
-    1.  **Siempre inicia con una frase resumen.**
-    2.  **Si el resultado tiene más de una fila y menos de 10, formatea la información CLAVE en una tabla Markdown.** Usa nombres de columna en español claro.
+    1.  **Siempre inicia con una frase resumen, usando negritas para destacar valores importantes.**
+    2.  **Si el resultado tiene más de una fila y menos de 10, formatea la información CLAVE en una tabla Markdown.** Usa nombres de columna en español claro (ej: 'Anio' debe ser 'Año').
     3.  **Si el resultado es un único valor (ej: un total), preséntalo en negrita y como un encabezado H3.**
-    4.  **No inventes datos.**
+    4.  **No inventes datos. Si el resultado es vacío, dilo.**
     """
 
     messages = [
-        SystemMessage(content=system_prompt),
+        SystemMessage(content=textwrap.dedent(system_prompt)),
         HumanMessage(
             content=f"Pregunta: {question}\nResultado JSON: {json.dumps(result, default=str)}"
         ),
@@ -261,15 +282,16 @@ def analyst_agent_node(state: GraphState) -> GraphState:
 
 
 def chitchat_agent_node(state: GraphState) -> GraphState:
+    """Maneja preguntas conversacionales."""
     question = state["question"]
 
     system_prompt = """
     Eres un asistente conversacional experto en analítica y BI.
-    Responde en español.
+    Responde en español, de forma amigable.
     """
 
     messages = [
-        SystemMessage(content=system_prompt),
+        SystemMessage(content=textwrap.dedent(system_prompt)),
         HumanMessage(content=question),
     ]
     ans = llm.invoke(messages).content
