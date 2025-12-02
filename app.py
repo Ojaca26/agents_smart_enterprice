@@ -1,4 +1,4 @@
-# app.py
+# app.py (FINAL)
 import streamlit as st
 from graph_sql import run_graph
 
@@ -31,17 +31,18 @@ if st.button("Preguntar", type="primary") and question.strip():
     result = state.get("result", {})
     error = state.get("error", "")
 
+    # Manejo de la Respuesta Final
     if isinstance(result, dict) and result.get("type") == "error":
-        st.error(result.get("message", "Ocurrió un error."))
+        st.error(result.get("message", "Ocurrió un error en el flujo de agentes."))
+    
     elif isinstance(result, dict) and result.get("type") in ("ok", "chat"):
-        st.subheader("Respuesta")
-        st.write(result.get("answer", ""))
-
-        if result.get("rows"):
-            st.subheader("Datos (preview)")
-            st.dataframe(result["rows"])
+        st.subheader("✅ Respuesta del Analista")
+        # Mostramos la respuesta generada en Markdown, que ya incluye el resumen y la tabla
+        st.markdown(result.get("answer", ""))
+    
     else:
+        # Fallback para errores no categorizados
         if error:
-            st.error(error)
+            st.error(f"Error desconocido: {error}")
         else:
             st.info("No se obtuvo resultado interpretable.")
