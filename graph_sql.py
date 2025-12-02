@@ -126,12 +126,14 @@ def router_node(state: GraphState) -> GraphState:
     state["route"] = route
     return state
 
+# graph_sql.py (SOLO REEMPLAZAR LA FUNCIÓN sql_agent_node)
 
 def sql_agent_node(state: GraphState) -> GraphState:
     """Genera SQL sobre las tablas permitidas."""
     question = state["question"]
     route = state["route"]
 
+    # Nota: El schema_text contiene las nuevas definiciones (bigint, date, etc.)
     system_prompt = f"""
     Eres un generador de SQL experto en MariaDB.
 
@@ -141,29 +143,35 @@ def sql_agent_node(state: GraphState) -> GraphState:
     Schema disponible:
     {schema_text}
 
-    Relaciones Lógicas (Foreign Keys):
-    - tbl_fact_costos.ID_Empresa = tbl_dim_empresa.ID_Empresa
+    ################################################
+    # REGLAS DE RELACIONES Y TIPOS CRUZADOS (JOINs) #
+    ################################################
     - tbl_fact_ingresos.ID_Empresa = tbl_dim_empresa.ID_Empresa
     - tbl_fact_solicitudes.ID_Empresa = tbl_dim_empresa.ID_Empresa
-    - tbl_fact_costos.ID_Concepto = tbl_dim_concepto.ID_CONCEPTO
-    - tbl_fact_ingresos.ID_Concepto = tbl_dim_concepto.ID_CONCEPTO
-    - tbl_fact_costos.ID_Ubicacion = tbl_dim_ubicacion.ID_Ubicacion
-    - tbl_fact_solicitudes.ID_Ubicacion = tbl_dim_ubicacion.ID_Ubicacion
-    
+    - Cuando uses tbl_fact_costos (para ID_Empresa/ID_Usuario):
+        - DEBES usar un CAST en el campo double para unirte al bigint: 
+          JOIN tbl_dim_empresa ON **CAST(fc.ID_Empresa AS SIGNED)** = de.ID_Empresa
+          JOIN tbl_dim_usuario ON **CAST(fc.ID_Usuario AS SIGNED)** = du.ID_USUARIO
+
     #########################################
-    # REGLAS CRUCIALES PARA FILTROS DE TIEMPO Y NOMBRES #
+    # REGLAS CRUCIALES PARA FILTROS DE TIEMPO #
     #########################################
-    - La columna **ID_Fecha** en las tablas de hecho es un número entero con formato **AAAAMMDD**.
-    - Para calcular el año (AAAA) a partir de ID_Fecha, **DEBES** usar la función CAST para asegurar que el resultado sea un entero: 
-      **SELECT CAST(ID_Fecha / 10000 AS SIGNED) AS Anio ...**
-    - Para filtrar por año o mes, DEBES usar rangos de números enteros (BETWEEN). Ejemplo para Enero de 2024: `WHERE ID_Fecha BETWEEN 20240101 AND 20240131`.
+    - Para **tbl_fact_ingresos** y **tbl_fact_costos**: La columna ID_Fecha es de tipo **DATE**.
+        - Para obtener el año, usa: **YEAR(ID_Fecha) AS Anio**.
+        - Para filtrar, usa: `WHERE ID_Fecha BETWEEN '2024-01-01' AND '2024-12-31'`.
+    - Para **tbl_fact_solicitudes**: Usa ID_Fecha_Solicitud (TEXT).
+        - Para obtener el año, usa: **LEFT(ID_Fecha_Solicitud, 4) AS Anio**.
+
+    #########################################
+    # REGLAS DE MÉTRICAS Y NOMBRES #
+    #########################################
+    - La métrica de costo total a usar en tbl_fact_costos es **Costo_Total_Nomina**.
     - Para la columna 'Año', usa el alias estricto 'Anio' (sin la 'ñ') en el SQL.
 
     Reglas de Generación SQL:
     1. Devuelve **SOLO el SQL limpio**, sin ```sql ni ``` ni backticks.
     2. No inventes tablas ni columnas.
-    3. Usa joins correctos y solo si es necesario.
-    4. Siempre que sea posible, usa las **columnas precalculadas** (ej: Total_Facturado, Margen_Bruto_Valor) de las tablas de dimensión para consultas simples y totales.
+    3. Siempre que sea posible, usa las **columnas precalculadas** de las tablas de dimensión.
     """
 
     messages = [
