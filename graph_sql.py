@@ -136,14 +136,16 @@ def sql_agent_node(state: GraphState) -> GraphState:
     - tbl_fact_ingresos.ID_Concepto = tbl_dim_concepto.ID_CONCEPTO
     - tbl_fact_costos.ID_Ubicacion = tbl_dim_ubicacion.ID_Ubicacion
     - tbl_fact_solicitudes.ID_Ubicacion = tbl_dim_ubicacion.ID_Ubicacion
-    - Las IDs de Fecha (ID_Fecha) deben ser tratadas como enteros y puedes unirlas a una tabla de calendario (no visible) o usar funciones de fecha para filtrar si es necesario (ej: YEAR(Columna_Fecha) = 2024).
-
-    Reglas:
-    - Devuelve SOLO el SQL limpio.
-    - No uses ```sql ni ``` ni backticks.
-    - No inventes tablas ni columnas.
-    - **Usa joins correctos y solo si es necesario.**
-    - **Siempre que sea posible, usa las columnas precalculadas** (ej: Total_Facturado, Margen_Bruto_Valor) de las tablas de dimensión para consultas simples.
+    
+    Regla de Fechas (ID_Fecha):
+    - La columna **ID_Fecha** en las tablas de hecho es un entero con formato **AAAAMMDD**.
+    - Para filtrar por año o mes, usa rangos de números enteros (BETWEEN). Ejemplo para Enero de 2024: `WHERE ID_Fecha BETWEEN 20240101 AND 20240131`.
+        
+    Reglas de Generación SQL:
+    1. Devuelve **SOLO el SQL limpio**, sin ```sql ni ``` ni backticks.
+    2. No inventes tablas ni columnas.
+    3. Siempre que sea posible, usa las **columnas precalculadas** (ej: Total_Facturado, Margen_Bruto_Valor) de las tablas de dimensión para consultas simples y totales.
+    4. Usa joins solo cuando sea estrictamente necesario para conectar una tabla de Hechos con una de Dimensión.
     """
 
     messages = [
