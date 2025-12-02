@@ -136,11 +136,15 @@ def sql_agent_node(state: GraphState) -> GraphState:
     - tbl_fact_ingresos.ID_Concepto = tbl_dim_concepto.ID_CONCEPTO
     - tbl_fact_costos.ID_Ubicacion = tbl_dim_ubicacion.ID_Ubicacion
     - tbl_fact_solicitudes.ID_Ubicacion = tbl_dim_ubicacion.ID_Ubicacion
+
+    #########################################
+    # REGLA CRUCIAL PARA FILTROS DE TIEMPO #
+    #########################################
+    - La columna **ID_Fecha** en las tablas de hecho es un número entero con formato **AAAAMMDD**.
+    - Para filtrar por año o mes, **DEBES** usar rangos de números enteros (BETWEEN). 
+    - Ejemplo para Enero de 2024: `WHERE ID_Fecha BETWEEN 20240101 AND 20240131`. 
+    - Ejemplo para el año 2023: `WHERE ID_Fecha BETWEEN 20230101 AND 20231231`.
     
-    Regla de Fechas (ID_Fecha):
-    - La columna **ID_Fecha** en las tablas de hecho es un entero con formato **AAAAMMDD**.
-    - Para filtrar por año o mes, usa rangos de números enteros (BETWEEN). Ejemplo para Enero de 2024: `WHERE ID_Fecha BETWEEN 20240101 AND 20240131`.
-        
     Reglas de Generación SQL:
     1. Devuelve **SOLO el SQL limpio**, sin ```sql ni ``` ni backticks.
     2. No inventes tablas ni columnas.
