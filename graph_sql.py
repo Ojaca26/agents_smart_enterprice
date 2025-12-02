@@ -144,6 +144,9 @@ def sql_agent_node(state: GraphState) -> GraphState:
     - Para filtrar por año o mes, **DEBES** usar rangos de números enteros (BETWEEN). 
     - Ejemplo para Enero de 2024: `WHERE ID_Fecha BETWEEN 20240101 AND 20240131`. 
     - Ejemplo para el año 2023: `WHERE ID_Fecha BETWEEN 20230101 AND 20231231`.
+     
+    Regla de Nomenclatura de Columnas:
+    - **Para la columna 'Año', usa el alias estricto 'Anio' (sin la 'ñ') en el SQL.**
     
     Reglas de Generación SQL:
     1. Devuelve **SOLO el SQL limpio**, sin ```sql ni ``` ni backticks.
