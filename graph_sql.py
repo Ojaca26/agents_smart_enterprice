@@ -174,6 +174,19 @@ def sql_validator_node(state: GraphState) -> GraphState:
                 error = f"Tabla no permitida o mal escrita: {candidate}"
                 break
 
+    # Nuevo: Validación de JOINS entre hechos (si no es ruta 'mixto')
+    if state["route"] != "mixto":
+        fact_tables = ["FACT_COSTOS", "FACT_INGRESOS", "FACT_SOLICITUDES"]
+        found_facts = [t for t in fact_tables if t in sql]
+        
+        if len(found_facts) > 1:
+            error = (
+                f"La pregunta '{state['question']}' ha generado un JOIN entre "
+                f"múltiples tablas de hecho ({', '.join(found_facts)}). "
+                "Esto requiere una ruta 'mixto' o es un SQL potencialmente incorrecto. "
+                "Genera un SQL que use SOLO una tabla de hecho."
+            )
+    
     state["error"] = error
     return state
 
@@ -219,9 +232,13 @@ def analyst_agent_node(state: GraphState) -> GraphState:
         return state
 
     system_prompt = """
-    Eres un analista de BI.
-    Resume resultados SQL de forma clara.
-    No inventes datos.
+    Eres un analista de BI. Tu objetivo es transformar los datos JSON resultantes de una consulta SQL en una respuesta de negocio clara, concisa y veraz.
+
+    Reglas de Formato:
+    1.  **Siempre inicia con una frase resumen.**
+    2.  **Si el resultado tiene más de una fila y menos de 10, formatea la información CLAVE en una tabla Markdown.** Usa nombres de columna en español claro.
+    3.  **Si el resultado es un único valor (ej: un total), preséntalo en negrita y como un encabezado H3.**
+    4.  **No inventes datos.**
     """
 
     messages = [
