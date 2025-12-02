@@ -30,36 +30,31 @@ def clean_sql(query: str) -> str:
 
 def safe_rows(rows):
     """
-    Convierte tipos de datos complejos (Decimal, Date/Time objects, etc.) 
-    a tipos seguros (float/str) para Streamlit, evitando StreamlitAPIException.
+    Convierte tipos de datos complejos a tipos seguros (float/str) para Streamlit,
+    usando solo tipos primitivos Python.
     """
     safe_list = []
     
-    # Asegurarse de que 'rows' es iterable
     if not isinstance(rows, list):
         rows = [rows]
 
     for row in rows:
         safe_row = {}
         for k, v in row.items():
-            if isinstance(v, decimal.Decimal):
-                # Decimal a Float (maneja Valores Monetarios)
+            if v is None:
+                # Manejar None explícitamente
+                safe_row[k] = "No especificado"
+            elif isinstance(v, decimal.Decimal):
+                # Decimal a Float
                 safe_row[k] = float(v)
-            elif v is None:
-                # None a string vacío
-                safe_row[k] = ""
             elif isinstance(v, (int, float, str)):
-                # Tipos primitivos seguros (int, float, str), los mantenemos
+                # Tipos primitivos seguros, los mantenemos
                 safe_row[k] = v
             else:
-                # Si es un objeto complejo del driver (Date, Time, BigInt, etc.), lo forzamos a cadena.
-                try:
-                    safe_row[k] = str(v)
-                except Exception:
-                    safe_row[k] = f"Error de Tipo: {type(v).__name__}"
+                # Forzar cualquier otro objeto complejo a string (incluyendo fechas, etc.)
+                safe_row[k] = str(v)
         safe_list.append(safe_row)
     return safe_list
-
 
 # ==========================
 # 1. LLM y BD compartidos
