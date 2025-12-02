@@ -30,31 +30,36 @@ def clean_sql(query: str) -> str:
 
 def safe_rows(rows):
     """
-    Convierte tipos de datos complejos a tipos seguros (float/str) para Streamlit,
-    usando solo tipos primitivos Python.
+    Convierte tipos de datos complejos (Decimal, Date/Time objects, etc.) 
+    a tipos seguros (float/str) para Streamlit.
     """
     safe_list = []
     
+    # Asegurarse de que 'rows' es iterable
     if not isinstance(rows, list):
         rows = [rows]
 
     for row in rows:
         safe_row = {}
         for k, v in row.items():
-            if v is None:
-                # Manejar None explícitamente
-                safe_row[k] = "No especificado"
-            elif isinstance(v, decimal.Decimal):
-                # Decimal a Float
+            if isinstance(v, decimal.Decimal):
+                # Decimal a Float (maneja Valores Monetarios)
                 safe_row[k] = float(v)
+            elif v is None:
+                # None a string vacío
+                safe_row[k] = ""
             elif isinstance(v, (int, float, str)):
-                # Tipos primitivos seguros, los mantenemos
+                # Tipos primitivos seguros (int, float, str), los mantenemos
                 safe_row[k] = v
             else:
-                # Forzar cualquier otro objeto complejo a string (incluyendo fechas, etc.)
-                safe_row[k] = str(v)
+                # Si es un objeto complejo del driver (Date, Time, BigInt, etc.), lo forzamos a cadena.
+                try:
+                    safe_row[k] = str(v)
+                except Exception:
+                    safe_row[k] = f"Error de Tipo: {type(v).__name__}"
         safe_list.append(safe_row)
     return safe_list
+
 
 # ==========================
 # 1. LLM y BD compartidos
@@ -86,24 +91,24 @@ class GraphState(TypedDict):
 # ==========================
 
 def router_node(state: GraphState) -> GraphState:
-    """Clasifica la intención de la pregunta."""
+    """Clasifica la intención de la pregunta, con lógica de fallback robusta."""
     question = state["question"]
 
     system_prompt = """
     Eres un clasificador de intención para un asistente de analítica de negocios.
+    Devuelve SOLO un objeto JSON con la clave 'route'.
     Categorías:
-    - ingresos
-    - costos
-    - solicitudes
-    - mixto
-    - chitchat
+    - ingresos (Preguntas sobre Valor_Facturado, ventas, facturación)
+    - costos (Preguntas sobre Costo_Total_Nomina, gastos)
+    - solicitudes (Preguntas sobre Tiempo_Espera, tickets, servicios, ubicación)
+    - mixto (Preguntas que requieren más de una tabla de hecho)
+    - chitchat (Saludos, preguntas de conocimiento general o fuera de los datos)
     """
 
     messages = [
         SystemMessage(content=textwrap.dedent(system_prompt)),
         HumanMessage(content=question),
     ]
-    # Se usa la lógica de fallback que ya tenías
     raw = llm.invoke(messages).content
 
     route: str = "chitchat"
@@ -113,12 +118,14 @@ def router_node(state: GraphState) -> GraphState:
         if value in ["ingresos", "costos", "solicitudes", "mixto", "chitchat"]:
             route = value
     except:
+        # Fallback Logic: Agregamos más palabras clave para evitar el 'chitchat' accidental.
         q = question.lower()
-        if any(w in q for w in ["ingreso", "venta", "facturaci", "recaudo"]):
+        if any(w in q for w in ["ingreso", "venta", "facturaci", "recaudo", "valor_facturado"]):
             route = "ingresos"
-        elif any(w in q for w in ["costo", "gasto", "rentab"]):
+        elif any(w in q for w in ["costo", "gasto", "rentab", "nomina", "costo_total"]):
             route = "costos"
-        elif any(w in q for w in ["solicitud", "ticket", "servicio"]):
+        # Incluimos 'tiempo', 'espera', 'ubicación' para clasificar preguntas sobre Solicitudes
+        elif any(w in q for w in ["solicitud", "ticket", "servicio", "tiempo", "espera", "ubicación", "kilos"]):
             route = "solicitudes"
         else:
             route = "chitchat"
@@ -126,14 +133,12 @@ def router_node(state: GraphState) -> GraphState:
     state["route"] = route
     return state
 
-# graph_sql.py (SOLO REEMPLAZAR LA FUNCIÓN sql_agent_node)
 
 def sql_agent_node(state: GraphState) -> GraphState:
-    """Genera SQL sobre las tablas permitidas."""
+    """Genera SQL con reglas de esquema actualizadas (fechas DATE, CASTs, Costo_Total_Nomina)."""
     question = state["question"]
     route = state["route"]
 
-    # Nota: El schema_text contiene las nuevas definiciones (bigint, date, etc.)
     system_prompt = f"""
     Eres un generador de SQL experto en MariaDB.
 
@@ -148,30 +153,31 @@ def sql_agent_node(state: GraphState) -> GraphState:
     ################################################
     - tbl_fact_ingresos.ID_Empresa = tbl_dim_empresa.ID_Empresa
     - tbl_fact_solicitudes.ID_Empresa = tbl_dim_empresa.ID_Empresa
-    - Cuando uses tbl_fact_costos (para ID_Empresa/ID_Usuario):
-        - DEBES usar un CAST en el campo double para unirte al bigint: 
-          JOIN tbl_dim_empresa ON **CAST(fc.ID_Empresa AS SIGNED)** = de.ID_Empresa
-          JOIN tbl_dim_usuario ON **CAST(fc.ID_Usuario AS SIGNED)** = du.ID_USUARIO
+    - Cuando uses tbl_fact_costos (para ID_Empresa/ID_Usuario) que son DOUBLE y se unen a BIGINT:
+        - DEBES usar un CAST en el campo double para unirte: 
+          JOIN tbl_dim_empresa AS de ON **CAST(fc.ID_Empresa AS SIGNED)** = de.ID_Empresa
+          JOIN tbl_dim_usuario AS du ON **CAST(fc.ID_Usuario AS SIGNED)** = du.ID_USUARIO
 
     #########################################
     # REGLAS CRUCIALES PARA FILTROS DE TIEMPO #
     #########################################
     - Para **tbl_fact_ingresos** y **tbl_fact_costos**: La columna ID_Fecha es de tipo **DATE**.
         - Para obtener el año, usa: **YEAR(ID_Fecha) AS Anio**.
-        - Para filtrar, usa: `WHERE ID_Fecha BETWEEN '2024-01-01' AND '2024-12-31'`.
-    - Para **tbl_fact_solicitudes**: Usa ID_Fecha_Solicitud (TEXT).
+        - Para filtrar por año o mes, usa rangos de fechas: `WHERE ID_Fecha BETWEEN '2024-01-01' AND '2024-12-31'`.
+    - Para **tbl_fact_solicitudes**: Usa ID_Fecha_Solicitud o ID_Fecha_Resolucion (TEXT/VARCHAR).
         - Para obtener el año, usa: **LEFT(ID_Fecha_Solicitud, 4) AS Anio**.
 
     #########################################
     # REGLAS DE MÉTRICAS Y NOMBRES #
     #########################################
     - La métrica de costo total a usar en tbl_fact_costos es **Costo_Total_Nomina**.
+    - La métrica de tiempo de espera a usar en tbl_fact_solicitudes es **Tiempo_Espera_Minutos** o **Tiempo_Espera_Horas**.
     - Para la columna 'Año', usa el alias estricto 'Anio' (sin la 'ñ') en el SQL.
 
     Reglas de Generación SQL:
     1. Devuelve **SOLO el SQL limpio**, sin ```sql ni ``` ni backticks.
     2. No inventes tablas ni columnas.
-    3. Siempre que sea posible, usa las **columnas precalculadas** de las tablas de dimensión.
+    3. Siempre que sea posible, usa las **columnas precalculadas** de las tablas de dimensión para consultas simples y totales.
     """
 
     messages = [
@@ -212,7 +218,6 @@ def sql_validator_node(state: GraphState) -> GraphState:
             error = (
                 f"La pregunta '{state['question']}' ha generado un JOIN entre "
                 f"múltiples tablas de hecho ({', '.join(found_facts)}). "
-                "Esto requiere una ruta 'mixto' o es un SQL potencialmente incorrecto. "
                 "Genera un SQL que use SOLO una tabla de hecho."
             )
     
