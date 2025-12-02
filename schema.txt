@@ -1,4 +1,4 @@
-# replica_VIEW_Dim_Concepto
+# tbl_dim_concepto
 ID_CONCEPTO (int)
 NOMBRE_CONCEPTO (varchar)
 Total_Facturado (decimal)
@@ -9,7 +9,7 @@ Matriz_BCG (varchar)
 Perfil_Ciclo_Vida (varchar)
 Segmento_Rotacion (varchar)
 
-# replica_VIEW_Dim_Empresa
+# tbl_dim_empresa
 ID_Empresa (int)
 Nombre_Empresa (varchar)
 NIT_Empresa (int)
@@ -23,7 +23,7 @@ Antiguedad_Cliente (varchar)
 Total_Ordenes (bigint)
 Fecha_Primera_Orden (date)
 
-# replica_VIEW_Dim_Ubicacion
+# tbl_dim_ubicacion
 ID_Ubicacion (int)
 Nombre_Ubicacion (varchar)
 Nivel_Ubicacion (int)
@@ -43,7 +43,7 @@ Departamento (varchar)
 Pais (varchar)
 Continente (varchar)
 
-# replica_VIEW_Fact_Costos
+# tbl_fact_costos
 ID_SOLICITUD (int)
 ID_Fecha (int)
 ID_Empresa (int)
@@ -59,7 +59,7 @@ Cant_Cajas (int)
 Placa (varchar)
 Nombre_Concepto (varchar)
 
-# replica_VIEW_Fact_Ingresos
+# tbl_fact_ingresos
 ID_SOLICITUD (int)
 ID_Fecha (int)
 ID_Empresa (int)
@@ -67,7 +67,7 @@ ID_Concepto (int)
 Valor_Facturado (double)
 Nombre_Concepto (varchar)
 
-# replica_VIEW_Fact_Solicitudes
+# tbl_fact_solicitudes
 ID_SOLICITUD (int)
 SERVICIO_SOLICITUD (int)
 ID_Fecha_Solicitud (varchar)
@@ -101,7 +101,7 @@ Meta_Total_Min (int)
 Meta_Total_Horas (decimal)
 Cumple_Meta_Total (int)
 
-# replica_VIEW_Dim_Usuario
+# tbl_dim_usuario
 ID_USUARIO (int)
 Nombre_Usuario (varchar)
 Cedula_Usuario (varchar)
