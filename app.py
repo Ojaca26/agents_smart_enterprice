@@ -8,16 +8,6 @@ st.title("🧠 IANA SQL – Agente multi-tabla (LangGraph)")
 
 st.markdown(
     """
-Este asistente responde preguntas de negocio usando las vistas:
-
-- `tbl_Dim_Concepto`
-- `tbl_Dim_Empresa`
-- `tbl_Dim_Ubicacion`
-- `tbl_Fact_Costos`
-- `tbl_Fact_Ingresos`
-- `tbl_Fact_Solicitudes`
-
-
 Formula preguntas del tipo:
 
 - *"Dame los ingresos totales por año"*
