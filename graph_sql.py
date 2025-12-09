@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import TypedDict, Literal, Any, Dict
-import streamlit as st # Importamos streamlit aquí para poder acceder a st.secrets
+import streamlit as st # Importado para acceder a st.secrets
 
 from langgraph.graph import StateGraph, END
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -64,12 +64,13 @@ try:
         google_api_key=st.secrets["GEMINI_API_KEY"],
     )
 except KeyError:
-    # Fallback si st.secrets no se carga (debería fallar aquí si no se corrigió secrets.toml)
-    st.error("Error crítico: La variable GEMINI_API_KEY no se encontró en st.secrets.", icon="⚠️")
+    # Si la clave no está en st.secrets, mostramos un error claro en Streamlit
+    st.error("Error crítico: La variable GEMINI_API_KEY no se encontró en st.secrets. Revise su configuración.", icon="⚠️")
     llm = None # Para evitar que el código falle si el LLM es None
 except Exception as e:
     st.error(f"Error al inicializar LLM: {e}", icon="⚠️")
     llm = None
+
 
 sql_db = get_sql_database()
 schema_text = load_schema_text()
@@ -94,7 +95,7 @@ class GraphState(TypedDict):
 def router_node(state: GraphState) -> GraphState:
     """Clasifica la intención de la pregunta, con lógica de fallback robusta."""
     if llm is None:
-        state["error"] = "Error de API: El modelo de lenguaje no pudo inicializarse. Revise la clave GEMINI_API_KEY."
+        state["error"] = "Error de API: El modelo de lenguaje no pudo inicializarse."
         return state
         
     question = state["question"]
@@ -125,7 +126,7 @@ def router_node(state: GraphState) -> GraphState:
         # Lógica de Fallback Rápida y Robusta (para evitar chitchat)
         q = question.lower()
         
-        # ... (Lógica de clasificación robusta se mantiene igual)
+        # Lógica de clasificación robusta
         if any(w in q for w in ["ingreso", "venta", "facturaci", "recaudo", "valor_facturado", "margen", "rentabilidad"]):
             route = "ingresos"
         elif any(w in q for w in ["costo", "gasto", "nomina", "costo_total", "costo_promedio"]):
@@ -150,7 +151,7 @@ def sql_agent_node(state: GraphState) -> GraphState:
     question = state["question"]
     route = state["route"]
 
-    # ... (system prompt con todas las reglas de negocio, JOINs y fechas)
+    # System prompt con todas las reglas de negocio, JOINs y fechas
     system_prompt = f"""
     Eres un generador de SQL experto en MariaDB.
 
