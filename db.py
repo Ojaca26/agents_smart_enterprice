@@ -25,18 +25,13 @@ def get_engine():
         f"mysql+pymysql://{creds['DB_USER']}:{creds['DB_PASS']}"
         f"@{creds['DB_HOST']}/{creds['DB_NAME']}"
     )
-    # ELIMINAMOS: st.write("🔧 URI generada:", uri)
-
+    # Se elimina la URI y el debug.
+    
     engine = create_engine(uri)
 
-    # ELIMINAMOS: Bloque de debug de verificación de base
-    try:
-        with engine.connect() as conn:
-            conn.execute("SELECT 1;").fetchone()
-    except Exception as e:
-        # Dejamos un error discreto para que el desarrollador lo vea
-        st.error(f"❌ Error crítico al conectar la base de datos: {str(e)}", icon="⚠️")
-
+    # Eliminamos el bloque problemático de verificación.
+    # Si la conexión falla, el error será capturado por el sql_executor_node.
+    
     return engine
 
 @st.cache_resource(show_spinner=False)
@@ -46,8 +41,7 @@ def get_sql_database() -> SQLDatabase:
     db = SQLDatabase(
         engine, 
         include_tables=ALLOWED_TABLES,
-        # SOLUCIÓN CRÍTICA: Forzar la base de datos a manejar nombres de tabla en minúsculas
-        # para evitar el conflicto de Linux/MariaDB (TBL_DIM_UBICACION vs tbl_dim_ubicacion).
+        # Solución para el problema de case sensitivity de Linux, crucial para que funcione en Streamlit Cloud.
         schema=None,
         view_support=True,
     )
