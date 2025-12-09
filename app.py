@@ -1,4 +1,4 @@
-# app.py (FINAL CON CHAT Y UX MEJORADA)
+# app.py
 import streamlit as st
 from graph_sql import run_graph
 
@@ -6,32 +6,32 @@ st.set_page_config(page_title="IANA SQL Multi-Agente", layout="wide")
 
 # Inicializar historial de chat
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.session_state.messages = [{"role": "assistant", "content": "¡Hola! Soy IANA, tu asistente de BI. ¿Qué deseas saber sobre nuestros ingresos, costos o solicitudes de servicio?"}]
 
 # Título Principal y Bienvenida
 st.title("🧠 IANA SQL – Agente multi-tabla (LangGraph)")
+st.caption("Estructura de consultas:")
 st.markdown(
     """
-Formula preguntas del tipo:
-
-- *"Dame los ingresos totales por año"*
-- *"Costo promedio por empresa en 2024"*
-- *"Tiempo promedio de espera por ubicación"*
+* *"Dame los ingresos totales por año"*
+* *"Costo promedio por empresa en 2024"*
+* *"Tiempo promedio de espera por ubicación"*
 """
 )
+st.divider()
 
 # Mostrar mensajes históricos
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
+    with st.chat_message(message["role"], avatar="🤖" if message["role"] == "assistant" else "👤"):
         st.markdown(message["content"])
 
 # Contenedor para el chat y entrada de audio/texto
 col1, col2 = st.columns([1, 8], gap="small")
 
 with col1:
-    # Simulación del botón de audio (similar a la imagen)
-    if st.button("🎤 Hablar", use_container_width=True, help="Función de audio no implementada, solo simulación"):
-        st.info("Función de audio no implementada.")
+    # Simulación del botón de audio
+    if st.button("🎤 Hablar", use_container_width=True, help="Función de voz/audio no implementada"):
+        st.info("Función de voz/audio no implementada en este prototipo.")
 
 with col2:
     # Entrada de chat principal
@@ -41,7 +41,7 @@ with col2:
 if question:
     # 1. Mostrar la pregunta del usuario
     st.session_state.messages.append({"role": "user", "content": question})
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar="👤"):
         st.markdown(question)
 
     # 2. Generar la respuesta del Agente
@@ -52,9 +52,8 @@ if question:
     route = state.get("route", "desconocida")
     sql_query = state.get("sql_query", "")
     result = state.get("result", {})
-    error = state.get("error", "")
     
-    with st.chat_message("assistant", avatar="🧠"):
+    with st.chat_message("assistant", avatar="🤖"):
         
         # Mostrar Debug (Ruta y SQL)
         with st.expander("Detalles de la Consulta (Debug)", expanded=False):
@@ -72,7 +71,7 @@ if question:
             st.markdown(answer)
         
         else:
-            answer = f"Error desconocido: {error}" if error else "No se obtuvo resultado interpretable."
+            answer = "No se obtuvo resultado interpretable."
             st.info(answer)
         
         # 4. Guardar la respuesta en el historial
