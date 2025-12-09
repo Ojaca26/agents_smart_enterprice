@@ -6,7 +6,7 @@ st.set_page_config(page_title="IANA SQL Multi-Agente", layout="wide")
 
 # Inicializar historial de chat
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "¡Hola! Soy IANA, tu asistente de BI. ¿Qué deseas saber sobre nuestros ingresos, costos o solicitudes de servicio?"}]
+    st.session_state.messages = [{"role": "assistant", "content": "¡Hola! Soy IANA, tu asistente de BI de Ventus. ¿Qué deseas saber sobre nuestros ingresos, costos o solicitudes de servicio?"}]
 
 # Título Principal y Bienvenida
 st.title("🧠 IANA SQL – Agente multi-tabla (LangGraph)")
