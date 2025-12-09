@@ -19,7 +19,7 @@ import decimal
 # UTILS (safe_rows y clean_sql - Versiones Robustas)
 # ==========================
 def clean_sql(query: str) -> str:
-    """Limpia SQL quitando formato Markdown, backticks y basura."""
+    # (El código de clean_sql se mantiene igual)
     if not query:
         return ""
     q = query.replace("```sql", "")
@@ -29,7 +29,7 @@ def clean_sql(query: str) -> str:
 
 
 def safe_rows(rows):
-    """Convierte tipos de datos complejos a tipos seguros (float/str) para Streamlit."""
+    # (El código de safe_rows se mantiene igual)
     safe_list = []
     if not isinstance(rows, list):
         rows = [rows]
@@ -53,25 +53,28 @@ def safe_rows(rows):
 
 
 # ==========================
-# 1. LLM y BD compartidos
+# 1. LLM y BD compartidos (Inicialización SAFEA)
 # ==========================
-try:
-    # FIX CRÍTICO: Forzamos a LangChain a leer la clave directamente de st.secrets
-    # Esto soluciona el ChatGoogleGenerativeAIError
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        temperature=0,
-        google_api_key=st.secrets["GEMINI_API_KEY"],
-    )
-except KeyError:
-    # Si la clave no está en st.secrets, mostramos un error claro en Streamlit
-    st.error("Error crítico: La variable GEMINI_API_KEY no se encontró en st.secrets. Revise su configuración.", icon="⚠️")
-    llm = None # Para evitar que el código falle si el LLM es None
-except Exception as e:
-    st.error(f"Error al inicializar LLM: {e}", icon="⚠️")
-    llm = None
+@st.cache_resource(show_spinner=False)
+def get_llm():
+    """Inicialización segura del LLM, leyendo la clave directamente de st.secrets."""
+    try:
+        # FIX CRÍTICO: Forzamos la autenticación de la manera más segura
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            temperature=0,
+            google_api_key=st.secrets["GEMINI_API_KEY"],
+        )
+        return llm
+    except KeyError:
+        st.error("Error crítico: La variable GEMINI_API_KEY no se encontró en st.secrets.", icon="⚠️")
+        return None
+    except Exception as e:
+        st.error(f"Error al inicializar LLM: {e}", icon="⚠️")
+        return None
 
 
+# La inicialización global debe ser eliminada y reemplazada por esta función de obtención:
 sql_db = get_sql_database()
 schema_text = load_schema_text()
 
@@ -89,11 +92,12 @@ class GraphState(TypedDict):
 
 
 # ==========================
-# 3. Nodos
+# 3. Nodos (USAN get_llm())
 # ==========================
 
 def router_node(state: GraphState) -> GraphState:
     """Clasifica la intención de la pregunta, con lógica de fallback robusta."""
+    llm = get_llm()
     if llm is None:
         state["error"] = "Error de API: El modelo de lenguaje no pudo inicializarse."
         return state
@@ -114,7 +118,7 @@ def router_node(state: GraphState) -> GraphState:
         """)),
         HumanMessage(content=question),
     ]
-    raw = llm.invoke(messages).content
+    raw = llm.invoke(messages).content # <-- La llamada que fallaba antes
 
     route: str = "chitchat"
     try:
@@ -144,6 +148,7 @@ def router_node(state: GraphState) -> GraphState:
 
 def sql_agent_node(state: GraphState) -> GraphState:
     """Genera SQL con reglas de esquema actualizadas (fechas DATE, CASTs, Costo_Total_Nomina)."""
+    llm = get_llm()
     if llm is None:
         state["error"] = "Error de API: El modelo de lenguaje no pudo inicializarse. Revise la clave GEMINI_API_KEY."
         return state
@@ -204,7 +209,10 @@ def sql_agent_node(state: GraphState) -> GraphState:
     return state
 
 # (Las funciones sql_validator_node, sql_executor_node, analyst_agent_node, y chitchat_agent_node
-# y la construcción del grafo se mantienen igual, ya que ya tienen las correcciones)
+# y la construcción del grafo se mantienen iguales)
+
+# --- (El resto de las funciones auxiliares del grafo se mantiene) ---
+
 def sql_validator_node(state: GraphState) -> GraphState:
     sql = state["sql_query"].upper()
     error = ""
@@ -218,13 +226,57 @@ def sql_executor_node(state: GraphState) -> GraphState:
     return state
     
 def analyst_agent_node(state: GraphState) -> GraphState:
-    # ... (Formateo) ...
+    # Aseguramos que el LLM esté disponible para la respuesta
+    llm = get_llm()
+    if llm is None:
+        state["result"] = {"type": "error", "message": "Error de API: LLM no disponible."}
+        return state
+        
+    question = state["question"]
+    result = state["result"]
+    error = state["error"]
+    
+    # ... (Lógica de análisis y respuesta) ...
+    
+    # ... (llamada a llm.invoke() para generar la respuesta) ...
+    messages = [
+        SystemMessage(content=textwrap.dedent("""
+        Eres un analista de BI. Tu objetivo es transformar los datos JSON resultantes...
+        """)),
+        HumanMessage(
+            content=f"Pregunta: {question}\nResultado JSON: {json.dumps(result, default=str)}"
+        ),
+    ]
+    answer = llm.invoke(messages).content
+
+    state["result"] = {"type": "ok", "answer": answer, "rows": result}
     return state
     
 def chitchat_agent_node(state: GraphState) -> GraphState:
-    # ... (Conversación) ...
+    llm = get_llm()
+    if llm is None:
+        state["result"] = {"type": "chat", "answer": "Lo siento, mi conexión con el servidor de inteligencia artificial está caída."}
+        return state
+        
+    question = state["question"]
+    # ... (Lógica de conversación) ...
+    messages = [
+        SystemMessage(content=textwrap.dedent("""
+        Eres un asistente conversacional experto en analítica y BI.
+        Responde en español, de forma amigable.
+        """)),
+        HumanMessage(content=question),
+    ]
+    ans = llm.invoke(messages).content
+
+    state["result"] = {"type": "chat", "answer": ans}
     return state
 
+
+# ==========================
+# 4. Construcción del Grafo
+# ==========================
+# ... (El constructor del grafo y la función run_graph se mantienen iguales)
 builder = StateGraph(GraphState)
 
 builder.add_node("router", router_node)
