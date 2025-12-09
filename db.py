@@ -20,17 +20,16 @@ ALLOWED_TABLES = [
 @st.cache_resource(show_spinner=False)
 def get_engine():
     """Crea el engine SQLAlchemy usando las credenciales de Streamlit."""
-    creds = st.secrets["db_credentials"]
+    # Usamos .get para manejar si db_credentials no existe
+    creds = st.secrets.get("db_credentials", {}) 
     uri = (
-        f"mysql+pymysql://{creds['DB_USER']}:{creds['DB_PASS']}"
-        f"@{creds['DB_HOST']}/{creds['DB_NAME']}"
+        f"mysql+pymysql://{creds.get('DB_USER')}:{creds.get('DB_PASS')}"
+        f"@{creds.get('DB_HOST')}/{creds.get('DB_NAME')}"
     )
-    # Se elimina la URI y el debug.
     
     engine = create_engine(uri)
-
-    # Eliminamos el bloque problemático de verificación.
-    # Si la conexión falla, el error será capturado por el sql_executor_node.
+    
+    # Se eliminan los bloques de st.write y verificación (SELECT 1;)
     
     return engine
 
@@ -41,7 +40,7 @@ def get_sql_database() -> SQLDatabase:
     db = SQLDatabase(
         engine, 
         include_tables=ALLOWED_TABLES,
-        # Solución para el problema de case sensitivity de Linux, crucial para que funcione en Streamlit Cloud.
+        # Fija el problema de la sensibilidad a mayúsculas/minúsculas en Linux
         schema=None,
         view_support=True,
     )
@@ -52,8 +51,6 @@ def load_schema_text() -> str:
     """Lee el schema.txt desde la raíz del proyecto."""
     schema_path = pathlib.Path("schema.txt")
     if not schema_path.exists():
-        raise FileNotFoundError(
-            f"No se encontró schema.txt en {schema_path.resolve()}. "
-            "Crea el archivo con la definición de las vistas."
-        )
+        return "" 
     return schema_path.read_text(encoding="utf-8")
+
