@@ -20,16 +20,17 @@ ALLOWED_TABLES = [
 @st.cache_resource(show_spinner=False)
 def get_engine():
     """Crea el engine SQLAlchemy usando las credenciales de Streamlit."""
-    # Usamos .get para manejar si db_credentials no existe
-    creds = st.secrets.get("db_credentials", {}) 
+    creds = st.secrets.get("db_credentials", {})
     uri = (
         f"mysql+pymysql://{creds.get('DB_USER')}:{creds.get('DB_PASS')}"
         f"@{creds.get('DB_HOST')}/{creds.get('DB_NAME')}"
     )
     
+    # Se eliminan los st.write de debug
+    
     engine = create_engine(uri)
     
-    # Se eliminan los bloques de st.write y verificación (SELECT 1;)
+    # Se elimina el bloque de verificación de la base de datos que causaba el error visual
     
     return engine
 
@@ -53,4 +54,3 @@ def load_schema_text() -> str:
     if not schema_path.exists():
         return "" 
     return schema_path.read_text(encoding="utf-8")
-
