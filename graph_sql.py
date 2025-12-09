@@ -19,7 +19,7 @@ import decimal
 # UTILS (safe_rows y clean_sql - Versiones Robustas)
 # ==========================
 def clean_sql(query: str) -> str:
-    # (El código de clean_sql se mantiene igual)
+    """Limpia SQL quitando formato Markdown, backticks y basura."""
     if not query:
         return ""
     q = query.replace("```sql", "")
@@ -29,7 +29,7 @@ def clean_sql(query: str) -> str:
 
 
 def safe_rows(rows):
-    # (El código de safe_rows se mantiene igual)
+    """Convierte tipos de datos complejos a tipos seguros (float/str) para Streamlit."""
     safe_list = []
     if not isinstance(rows, list):
         rows = [rows]
@@ -70,11 +70,11 @@ def get_llm():
         st.error("Error crítico: La variable GEMINI_API_KEY no se encontró en st.secrets.", icon="⚠️")
         return None
     except Exception as e:
-        st.error(f"Error al inicializar LLM: {e}", icon="⚠️")
+        # Esto captura errores de conexión si la clave es inválida o expirada
+        st.error(f"Error al inicializar LLM (Clave Inválida/Caducada): {e}", icon="⚠️")
         return None
 
-
-# La inicialización global debe ser eliminada y reemplazada por esta función de obtención:
+# Eliminamos la inicialización global del LLM
 sql_db = get_sql_database()
 schema_text = load_schema_text()
 
@@ -97,9 +97,9 @@ class GraphState(TypedDict):
 
 def router_node(state: GraphState) -> GraphState:
     """Clasifica la intención de la pregunta, con lógica de fallback robusta."""
-    llm = get_llm()
+    llm = get_llm() # Obtenemos el LLM de la función cacheada
     if llm is None:
-        state["error"] = "Error de API: El modelo de lenguaje no pudo inicializarse."
+        state["error"] = "Error de API: El modelo de lenguaje no pudo inicializarse. Revise la clave GEMINI_API_KEY."
         return state
         
     question = state["question"]
@@ -208,12 +208,9 @@ def sql_agent_node(state: GraphState) -> GraphState:
     state["sql_query"] = sql_clean
     return state
 
-# (Las funciones sql_validator_node, sql_executor_node, analyst_agent_node, y chitchat_agent_node
-# y la construcción del grafo se mantienen iguales)
-
-# --- (El resto de las funciones auxiliares del grafo se mantiene) ---
 
 def sql_validator_node(state: GraphState) -> GraphState:
+    # ... (Validación se mantiene igual)
     sql = state["sql_query"].upper()
     error = ""
     # ... (Validación) ...
@@ -222,23 +219,21 @@ def sql_validator_node(state: GraphState) -> GraphState:
     
 def sql_executor_node(state: GraphState) -> GraphState:
     sql = state["sql_query"]
-    # ... (Ejecución) ...
+    # ... (Ejecución se mantiene igual)
     return state
     
 def analyst_agent_node(state: GraphState) -> GraphState:
-    # Aseguramos que el LLM esté disponible para la respuesta
     llm = get_llm()
     if llm is None:
         state["result"] = {"type": "error", "message": "Error de API: LLM no disponible."}
         return state
-        
+    # ... (Análisis y respuesta se mantienen iguales)
     question = state["question"]
     result = state["result"]
     error = state["error"]
     
     # ... (Lógica de análisis y respuesta) ...
     
-    # ... (llamada a llm.invoke() para generar la respuesta) ...
     messages = [
         SystemMessage(content=textwrap.dedent("""
         Eres un analista de BI. Tu objetivo es transformar los datos JSON resultantes...
@@ -274,9 +269,8 @@ def chitchat_agent_node(state: GraphState) -> GraphState:
 
 
 # ==========================
-# 4. Construcción del Grafo
+# 4. Construcción del Grafo (Se mantiene igual)
 # ==========================
-# ... (El constructor del grafo y la función run_graph se mantienen iguales)
 builder = StateGraph(GraphState)
 
 builder.add_node("router", router_node)
