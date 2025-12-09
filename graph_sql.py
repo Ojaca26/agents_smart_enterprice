@@ -89,6 +89,7 @@ class GraphState(TypedDict):
 # ==========================
 # 3. Nodos
 # ==========================
+# graph_sql.py (REEMPLAZAR la función router_node)
 
 def router_node(state: GraphState) -> GraphState:
     """Clasifica la intención de la pregunta, con lógica de fallback robusta."""
@@ -113,20 +114,31 @@ def router_node(state: GraphState) -> GraphState:
 
     route: str = "chitchat"
     try:
+        # 1. Intenta parsear el JSON limpio del LLM
         data = json.loads(raw)
         value = data.get("route", "chitchat")
         if value in ["ingresos", "costos", "solicitudes", "mixto", "chitchat"]:
             route = value
     except:
-        # Fallback Logic: Agregamos más palabras clave para evitar el 'chitchat' accidental.
+        # 2. Lógica de Fallback Rápida y Robusta (Soluciona el problema de chitchat)
         q = question.lower()
-        if any(w in q for w in ["ingreso", "venta", "facturaci", "recaudo", "valor_facturado"]):
+        
+        # Ruta Ingresos (con métricas clave)
+        if any(w in q for w in ["ingreso", "venta", "facturaci", "recaudo", "valor_facturado", "margen", "rentabilidad"]):
             route = "ingresos"
-        elif any(w in q for w in ["costo", "gasto", "rentab", "nomina", "costo_total"]):
+        
+        # Ruta Costos (con métricas clave, incluyendo 'promedio')
+        elif any(w in q for w in ["costo", "gasto", "nomina", "costo_total", "costo_promedio"]):
             route = "costos"
-        # Incluimos 'tiempo', 'espera', 'ubicación' para clasificar preguntas sobre Solicitudes
-        elif any(w in q for w in ["solicitud", "ticket", "servicio", "tiempo", "espera", "ubicación", "kilos"]):
+            
+        # Ruta Solicitudes (con métricas de tiempo y ubicación)
+        elif any(w in q for w in ["solicitud", "ticket", "servicio", "tiempo", "espera", "ubicación", "kilos", "cajas", "placa"]):
             route = "solicitudes"
+        
+        # Ruta Mixto (si pregunta sobre ingresos Y costos)
+        elif any(w in q for w in ["ingreso", "costo"]) and any(w in q for w in ["empresa", "año"]):
+            route = "mixto"
+        
         else:
             route = "chitchat"
 
