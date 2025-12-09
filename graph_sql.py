@@ -1,4 +1,4 @@
-# graph_sql.py
+# graph_sql.py (Versión FINAL DE TRABAJO)
 from __future__ import annotations
 
 from typing import TypedDict, Literal, Any, Dict
@@ -59,7 +59,7 @@ def safe_rows(rows):
 def get_llm():
     """Inicialización segura del LLM, leyendo la clave directamente de st.secrets."""
     try:
-        # FIX CRÍTICO: Forzamos la autenticación de la manera más segura
+        # FIX CRÍTICO: Forzamos la autenticación de la manera más segura con st.secrets
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             temperature=0,
@@ -103,7 +103,6 @@ def router_node(state: GraphState) -> GraphState:
         return state
         
     question = state["question"]
-    # ... (System prompt se mantiene igual)
 
     messages = [
         SystemMessage(content=textwrap.dedent("""
@@ -210,34 +209,98 @@ def sql_agent_node(state: GraphState) -> GraphState:
 
 
 def sql_validator_node(state: GraphState) -> GraphState:
-    # ... (Validación se mantiene igual)
+    """Valida el SQL generado por seguridad y coherencia."""
     sql = state["sql_query"].upper()
     error = ""
-    # ... (Validación) ...
+
+    if "SELECT" not in sql or "FROM" not in sql:
+        error = "El SQL generado no parece un SELECT válido."
+
+    allowed = [t.upper() for t in ALLOWED_TABLES]
+    tokens = sql.replace("\n", " ").split()
+
+    for i, t in enumerate(tokens):
+        if t in ("FROM", "JOIN") and i + 1 < len(tokens):
+            candidate = tokens[i + 1].strip(" ,")
+            if candidate.upper() not in allowed:
+                error = f"Tabla no permitida o mal escrita: {candidate}"
+                break
+
+    # Validación de JOINS entre hechos (si no es ruta 'mixto')
+    if state["route"] != "mixto":
+        fact_tables = ["FACT_COSTOS", "FACT_INGRESOS", "FACT_SOLICITUDES"]
+        found_facts = [t for t in fact_tables if t in sql]
+        
+        if len(found_facts) > 1:
+            error = (
+                f"La pregunta '{state['question']}' ha generado un JOIN entre "
+                f"múltiples tablas de hecho ({', '.join(found_facts)}). "
+                "Genera un SQL que use SOLO una tabla de hecho."
+            )
+    
     state["error"] = error
     return state
-    
+
+
 def sql_executor_node(state: GraphState) -> GraphState:
+    """Ejecuta SQL seguro."""
     sql = state["sql_query"]
-    # ... (Ejecución se mantiene igual)
+
+    if not sql.strip():
+        state["error"] = "SQL vacío."
+        return state
+
+    try:
+        cleaned_sql = clean_sql(sql)
+        # LangChain's SQLDatabase.run() devuelve una lista de dicts
+        result = sql_db.run(cleaned_sql)
+
+        # Aplicar limpieza de tipos para evitar errores de Streamlit/Pandas
+        if isinstance(result, list):
+            result = safe_rows(result)
+
+        state["result"] = result
+        state["error"] = ""
+    except Exception as e:
+        state["result"] = []
+        state["error"] = f"Error al ejecutar SQL: {e}"
+
     return state
-    
+
+
 def analyst_agent_node(state: GraphState) -> GraphState:
+    """Transforma el resultado SQL en una respuesta de negocio en Markdown."""
     llm = get_llm()
     if llm is None:
         state["result"] = {"type": "error", "message": "Error de API: LLM no disponible."}
         return state
-    # ... (Análisis y respuesta se mantienen iguales)
+        
     question = state["question"]
     result = state["result"]
     error = state["error"]
-    
-    # ... (Lógica de análisis y respuesta) ...
-    
+
+    if error:
+        system_prompt = "Eres un asistente técnico. Explica el error de forma simple, pidiendo al usuario que reformule la pregunta o revise el esquema. Nunca muestres el SQL generado."
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=error),
+        ]
+        exp = llm.invoke(messages).content
+        state["result"] = {"type": "error", "message": exp}
+        return state
+
+    system_prompt = """
+    Eres un analista de BI. Tu objetivo es transformar los datos JSON resultantes de una consulta SQL en una respuesta de negocio clara, concisa y veraz.
+
+    Reglas de Formato:
+    1.  **Siempre inicia con una frase resumen, usando negritas para destacar valores importantes.**
+    2.  **Si el resultado tiene más de una fila y menos de 10, formatea la información CLAVE en una tabla Markdown.** Usa nombres de columna en español claro (ej: 'Anio' debe ser 'Año').
+    3.  **Si el resultado es un único valor (ej: un total), preséntalo en negrita y como un encabezado H3.**
+    4.  **No inventes datos. Si el resultado es vacío, dilo.**
+    """
+
     messages = [
-        SystemMessage(content=textwrap.dedent("""
-        Eres un analista de BI. Tu objetivo es transformar los datos JSON resultantes...
-        """)),
+        SystemMessage(content=textwrap.dedent(system_prompt)),
         HumanMessage(
             content=f"Pregunta: {question}\nResultado JSON: {json.dumps(result, default=str)}"
         ),
@@ -246,20 +309,24 @@ def analyst_agent_node(state: GraphState) -> GraphState:
 
     state["result"] = {"type": "ok", "answer": answer, "rows": result}
     return state
-    
+
+
 def chitchat_agent_node(state: GraphState) -> GraphState:
+    """Maneja preguntas conversacionales."""
     llm = get_llm()
     if llm is None:
         state["result"] = {"type": "chat", "answer": "Lo siento, mi conexión con el servidor de inteligencia artificial está caída."}
         return state
         
     question = state["question"]
-    # ... (Lógica de conversación) ...
+
+    system_prompt = """
+    Eres un asistente conversacional experto en analítica y BI.
+    Responde en español, de forma amigable.
+    """
+
     messages = [
-        SystemMessage(content=textwrap.dedent("""
-        Eres un asistente conversacional experto en analítica y BI.
-        Responde en español, de forma amigable.
-        """)),
+        SystemMessage(content=textwrap.dedent(system_prompt)),
         HumanMessage(content=question),
     ]
     ans = llm.invoke(messages).content
@@ -271,6 +338,7 @@ def chitchat_agent_node(state: GraphState) -> GraphState:
 # ==========================
 # 4. Construcción del Grafo (Se mantiene igual)
 # ==========================
+
 builder = StateGraph(GraphState)
 
 builder.add_node("router", router_node)
