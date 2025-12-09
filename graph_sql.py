@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import TypedDict, Literal, Any, Dict
+import streamlit as st # Importado para acceder a st.secrets
 
 from langgraph.graph import StateGraph, END
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -17,7 +18,7 @@ import decimal
 # ==========================
 # UTILS
 # ==========================
-
+# (safe_rows y clean_sql se mantienen iguales, asumiendo que ya tienen la última versión)
 def clean_sql(query: str) -> str:
     """Limpia SQL quitando formato Markdown, backticks y basura."""
     if not query:
@@ -29,13 +30,8 @@ def clean_sql(query: str) -> str:
 
 
 def safe_rows(rows):
-    """
-    Convierte tipos de datos complejos (Decimal, Date/Time objects, etc.) 
-    a tipos seguros (float/str) para Streamlit.
-    """
+    """Convierte tipos de datos complejos a tipos seguros (float/str) para Streamlit."""
     safe_list = []
-    
-    # Asegurarse de que 'rows' es iterable
     if not isinstance(rows, list):
         rows = [rows]
 
@@ -43,16 +39,12 @@ def safe_rows(rows):
         safe_row = {}
         for k, v in row.items():
             if isinstance(v, decimal.Decimal):
-                # Decimal a Float (maneja Valores Monetarios)
                 safe_row[k] = float(v)
             elif v is None:
-                # None a string vacío
                 safe_row[k] = ""
             elif isinstance(v, (int, float, str)):
-                # Tipos primitivos seguros (int, float, str), los mantenemos
                 safe_row[k] = v
             else:
-                # Si es un objeto complejo del driver (Date, Time, BigInt, etc.), lo forzamos a cadena.
                 try:
                     safe_row[k] = str(v)
                 except Exception:
@@ -64,11 +56,20 @@ def safe_rows(rows):
 # ==========================
 # 1. LLM y BD compartidos
 # ==========================
+try:
+    # FIX CRÍTICO: Forzamos a LangChain a leer la clave directamente de st.secrets
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        temperature=0,
+        google_api_key=st.secrets["GEMINI_API_KEY"],
+    )
+except KeyError:
+    # Si la clave no está en st.secrets, usamos el método tradicional (os.getenv)
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        temperature=0,
+    )
 
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    temperature=0,
-)
 
 sql_db = get_sql_database()
 schema_text = load_schema_text()
@@ -89,7 +90,6 @@ class GraphState(TypedDict):
 # ==========================
 # 3. Nodos
 # ==========================
-# graph_sql.py (REEMPLAZAR la función router_node)
 
 def router_node(state: GraphState) -> GraphState:
     """Clasifica la intención de la pregunta, con lógica de fallback robusta."""
@@ -114,31 +114,21 @@ def router_node(state: GraphState) -> GraphState:
 
     route: str = "chitchat"
     try:
-        # 1. Intenta parsear el JSON limpio del LLM
         data = json.loads(raw)
         value = data.get("route", "chitchat")
         if value in ["ingresos", "costos", "solicitudes", "mixto", "chitchat"]:
             route = value
     except:
-        # 2. Lógica de Fallback Rápida y Robusta (Soluciona el problema de chitchat)
+        # Lógica de Fallback Rápida y Robusta (para evitar chitchat)
         q = question.lower()
-        
-        # Ruta Ingresos (con métricas clave)
         if any(w in q for w in ["ingreso", "venta", "facturaci", "recaudo", "valor_facturado", "margen", "rentabilidad"]):
             route = "ingresos"
-        
-        # Ruta Costos (con métricas clave, incluyendo 'promedio')
         elif any(w in q for w in ["costo", "gasto", "nomina", "costo_total", "costo_promedio"]):
             route = "costos"
-            
-        # Ruta Solicitudes (con métricas de tiempo y ubicación)
         elif any(w in q for w in ["solicitud", "ticket", "servicio", "tiempo", "espera", "ubicación", "kilos", "cajas", "placa"]):
             route = "solicitudes"
-        
-        # Ruta Mixto (si pregunta sobre ingresos Y costos)
         elif any(w in q for w in ["ingreso", "costo"]) and any(w in q for w in ["empresa", "año"]):
             route = "mixto"
-        
         else:
             route = "chitchat"
 
@@ -202,6 +192,7 @@ def sql_agent_node(state: GraphState) -> GraphState:
     state["sql_query"] = sql_clean
     return state
 
+# ... (rest of the graph_sql.py functions)
 
 def sql_validator_node(state: GraphState) -> GraphState:
     """Valida el SQL generado por seguridad y coherencia."""
@@ -321,7 +312,7 @@ def chitchat_agent_node(state: GraphState) -> GraphState:
 
 
 # ==========================
-# 4. Construcción del Grafo
+# 4. Construcción del Grafo (Se mantiene igual)
 # ==========================
 
 builder = StateGraph(GraphState)
