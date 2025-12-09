@@ -25,25 +25,32 @@ def get_engine():
         f"mysql+pymysql://{creds['DB_USER']}:{creds['DB_PASS']}"
         f"@{creds['DB_HOST']}/{creds['DB_NAME']}"
     )
-    st.write("🔧 URI generada:", uri)
+    # ELIMINAMOS: st.write("🔧 URI generada:", uri)
 
     engine = create_engine(uri)
 
-    # 🔍 DEBUG: Mostrar a qué base realmente se conecta Streamlit
+    # ELIMINAMOS: Bloque de debug de verificación de base
     try:
         with engine.connect() as conn:
-            result = conn.execute("SELECT DATABASE();").fetchone()
-            st.write("🟡 Base usada por Streamlit:", result[0])
+            conn.execute("SELECT 1;").fetchone()
     except Exception as e:
-        st.write("❌ Error verificando base:", str(e))
+        # Dejamos un error discreto para que el desarrollador lo vea
+        st.error(f"❌ Error crítico al conectar la base de datos: {str(e)}", icon="⚠️")
 
     return engine
 
 @st.cache_resource(show_spinner=False)
 def get_sql_database() -> SQLDatabase:
-    """Envuelve el engine en un SQLDatabase de LangChain."""
+    """Envuelve el engine en un SQLDatabase de LangChain, con manejo de case sensitivity."""
     engine = get_engine()
-    db = SQLDatabase(engine, include_tables=ALLOWED_TABLES)
+    db = SQLDatabase(
+        engine, 
+        include_tables=ALLOWED_TABLES,
+        # SOLUCIÓN CRÍTICA: Forzar la base de datos a manejar nombres de tabla en minúsculas
+        # para evitar el conflicto de Linux/MariaDB (TBL_DIM_UBICACION vs tbl_dim_ubicacion).
+        schema=None,
+        view_support=True,
+    )
     return db
 
 
