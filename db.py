@@ -26,11 +26,9 @@ def get_engine():
         f"@{creds.get('DB_HOST')}/{creds.get('DB_NAME')}"
     )
     
-    # Se eliminan los st.write de debug
+    # Se eliminan los st.write de debug y verificación de la conexión.
     
     engine = create_engine(uri)
-    
-    # Se elimina el bloque de verificación de la base de datos que causaba el error visual
     
     return engine
 
