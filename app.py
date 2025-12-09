@@ -10,7 +10,15 @@ if "messages" not in st.session_state:
 
 # Título Principal y Bienvenida
 st.title("🧠 IANA SQL – Agente multi-tabla (LangGraph)")
-st.caption("Asistente de BI de Ventus. Pregunta sobre ingresos, costos y solicitudes de servicio.")
+st.markdown(
+    """
+Formula preguntas del tipo:
+
+- *"Dame los ingresos totales por año"*
+- *"Costo promedio por empresa en 2024"*
+- *"Tiempo promedio de espera por ubicación"*
+"""
+)
 
 # Mostrar mensajes históricos
 for message in st.session_state.messages:
